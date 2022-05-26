@@ -169,18 +169,16 @@ ByteBuffer& operator<<(ByteBuffer& data, SpellCastLogData const& spellCastLogDat
 
 ByteBuffer& operator<<(ByteBuffer& data, ContentTuningParams const& contentTuningParams)
 {
-    data << float(contentTuningParams.PlayerItemLevel);
-    data << float(contentTuningParams.TargetItemLevel);
+    data << uint16(contentTuningParams.PlayerItemLevel);
     data << int16(contentTuningParams.PlayerLevelDelta);
-    data << uint16(contentTuningParams.ScalingHealthItemLevelCurveID);
+    data << uint16(contentTuningParams.TargetItemLevel);
     data << uint8(contentTuningParams.TargetLevel);
     data << uint8(contentTuningParams.Expansion);
+    data << uint8(contentTuningParams.TargetMinScalingLevel);
+    data << uint8(contentTuningParams.TargetMaxScalingLevel);
     data << int8(contentTuningParams.TargetScalingLevelDelta);
-    data << uint32(contentTuningParams.Flags);
-    data << int32(contentTuningParams.PlayerContentTuningID);
-    data << int32(contentTuningParams.TargetContentTuningID);
     data.WriteBits(contentTuningParams.Type, 4);
-    data.FlushBits();
+    data.WriteBit(contentTuningParams.ScalesWithItemLevel ? 1 : 0);
     return data;
 }
 

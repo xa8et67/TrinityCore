@@ -96,7 +96,7 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Spells::AuraDataInfo cons
 {
     data << auraData.CastID;
     data << int32(auraData.SpellID);
-    data << auraData.Visual;
+    data << int32(auraData.SpellXSpellVisualID);
     data << uint16(auraData.Flags);
     data << uint32(auraData.ActiveFlags);
     data << uint16(auraData.CastLevel);
@@ -541,7 +541,7 @@ WorldPacket const* WorldPackets::Spells::PetCastFailed::Write()
 
 ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Spells::SpellModifierData const& spellModifierData)
 {
-    data << float(spellModifierData.ModifierValue);
+    data << int32(spellModifierData.ModifierValue);
     data << uint8(spellModifierData.ClassIndex);
 
     return data;
@@ -832,7 +832,7 @@ WorldPacket const* WorldPackets::Spells::SpellChannelStart::Write()
 {
     _worldPacket << CasterGUID;
     _worldPacket << int32(SpellID);
-    _worldPacket << Visual;
+    _worldPacket << int32(SpellXSpellVisualID);
     _worldPacket << uint32(ChannelDuration);
     _worldPacket.WriteBit(InterruptImmunities.has_value());
     _worldPacket.WriteBit(HealPrediction.has_value());
@@ -897,7 +897,6 @@ WorldPacket const* WorldPackets::Spells::MirrorImageComponentedData::Write()
 {
     _worldPacket << UnitGUID;
     _worldPacket << int32(DisplayID);
-    _worldPacket << int32(SpellVisualKitID);
     _worldPacket << uint8(RaceID);
     _worldPacket << uint8(Gender);
     _worldPacket << uint8(ClassID);

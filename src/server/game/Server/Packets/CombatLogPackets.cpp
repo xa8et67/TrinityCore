@@ -24,7 +24,7 @@ WorldPacket const* WorldPackets::CombatLog::SpellNonMeleeDamageLog::Write()
     *this << CasterGUID;
     *this << CastID;
     *this << int32(SpellID);
-    *this << Visual;
+    *this << int32(SpellXSpellVisualID);
     *this << int32(Damage);
     *this << int32(OriginalDamage);
     *this << int32(Overkill);

@@ -179,7 +179,7 @@ namespace WorldPackets
         {
             ObjectGuid CastID;
             int32 SpellID = 0;
-            SpellCastVisual Visual;
+            int32 SpellXSpellVisualID = 0;
             uint16 Flags = 0;
             uint32 ActiveFlags = 0;
             uint16 CastLevel = 1;
@@ -501,7 +501,7 @@ namespace WorldPackets
 
         struct SpellModifierData
         {
-            float ModifierValue = 0.0f;
+            int32 ModifierValue = 0.0f;
             uint8 ClassIndex = 0;
         };
 
@@ -828,7 +828,7 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             int32 SpellID = 0;
-            SpellCastVisual Visual;
+            int32 SpellXSpellVisualID = 0;
             Optional<SpellChannelStartInterruptImmunities> InterruptImmunities;
             ObjectGuid CasterGUID;
             Optional<SpellTargetedHealPrediction> HealPrediction;
@@ -903,7 +903,6 @@ namespace WorldPackets
 
             ObjectGuid UnitGUID;
             int32 DisplayID = 0;
-            int32 SpellVisualKitID = 0;
             uint8 RaceID = 0;
             uint8 Gender = 0;
             uint8 ClassID = 0;

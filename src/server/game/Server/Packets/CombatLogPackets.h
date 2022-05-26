@@ -37,7 +37,7 @@ namespace WorldPackets
             ObjectGuid CasterGUID;
             ObjectGuid CastID;
             int32 SpellID = 0;
-            Spells::SpellCastVisual Visual;
+            int32 SpellXSpellVisualID = 0;
             int32 Damage = 0;
             int32 OriginalDamage = 0;
             int32 Overkill = -1;
