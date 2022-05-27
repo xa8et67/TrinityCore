@@ -352,12 +352,6 @@ namespace WorldPackets
             float Pitch = 0.0f;
         };
 
-        struct SpellAmmo
-        {
-            int32 DisplayID = 0;
-            int8 InventoryType = 0;
-        };
-
         struct CreatureImmunities
         {
             uint32 School = 0;
@@ -378,23 +372,23 @@ namespace WorldPackets
             ObjectGuid CastID;
             ObjectGuid OriginalCastID;
             int32 SpellID       = 0;
-            SpellCastVisual Visual;
+            int32 SpellXSpellVisualID = 0;
             uint32 CastFlags    = 0;
             uint32 CastFlagsEx  = 0;
             uint32 CastTime     = 0;
             std::vector<ObjectGuid> HitTargets;
             std::vector<ObjectGuid> MissTargets;
-            std::vector<SpellHitStatus> HitStatus;
             std::vector<SpellMissStatus> MissStatus;
             SpellTargetData Target;
             std::vector<SpellPowerData> RemainingPower;
             Optional<RuneData> RemainingRunes;
             MissileTrajectoryResult MissileTrajectory;
-            SpellAmmo Ammo;
             uint8 DestLocSpellCastIndex = 0;
             std::vector<TargetLocation> TargetPoints;
             CreatureImmunities Immunities;
             SpellHealPrediction Predict;
+            Optional<int32> Unknown340_1; // SpellMissle/Ammo Visual related, CAST_FLAG_PROJECTILE
+            Optional<int32> Unknown340_2; // SpellMissle/Ammo Visual related, CAST_FLAG_PROJECTILE
         };
 
         class SpellGo final : public CombatLog::CombatLogServerPacket
@@ -451,7 +445,7 @@ namespace WorldPackets
 
             ObjectGuid CasterUnit;
             uint32 SpellID  = 0;
-            SpellCastVisual Visual;
+            int32 SpellXSpellVisualID = 0;
             uint16 Reason   = 0;
             ObjectGuid CastID;
         };
@@ -465,7 +459,7 @@ namespace WorldPackets
 
             ObjectGuid CasterUnit;
             uint32 SpellID  = 0;
-            SpellCastVisual Visual;
+            int32 SpellXSpellVisualID = 0;
             uint8 Reason    = 0;
             ObjectGuid CastID;
         };
@@ -479,7 +473,7 @@ namespace WorldPackets
 
             ObjectGuid CastID;
             int32 SpellID             = 0;
-            SpellCastVisual Visual;
+            int32 SpellXSpellVisualID = 0;
             int32 Reason              = 0;
             int32 FailedArg1          = -1;
             int32 FailedArg2          = -1;

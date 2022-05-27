@@ -298,7 +298,7 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Spells::TargetLocation co
 
 ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Spells::SpellTargetData const& spellTargetData)
 {
-    data.WriteBits(spellTargetData.Flags, 26);
+    data.WriteBits(spellTargetData.Flags, 27);
     data.WriteBit(spellTargetData.SrcLocation.has_value());
     data.WriteBit(spellTargetData.DstLocation.has_value());
     data.WriteBit(spellTargetData.Orientation.has_value());
@@ -367,13 +367,6 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Spells::MissileTrajectory
     return data;
 }
 
-ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Spells::SpellAmmo const& spellAmmo)
-{
-    data << int32(spellAmmo.DisplayID);
-    data << int8(spellAmmo.InventoryType);
-    return data;
-}
-
 ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Spells::CreatureImmunities const& immunities)
 {
     data << int32(immunities.School);
@@ -396,22 +389,22 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Spells::SpellCastData con
     data << spellCastData.CastID;
     data << spellCastData.OriginalCastID;
     data << int32(spellCastData.SpellID);
-    data << spellCastData.Visual;
+    data << int32(spellCastData.SpellXSpellVisualID);
     data << uint32(spellCastData.CastFlags);
     data << uint32(spellCastData.CastFlagsEx);
     data << uint32(spellCastData.CastTime);
     data << spellCastData.MissileTrajectory;
-    data << int32(spellCastData.Ammo.DisplayID);
     data << uint8(spellCastData.DestLocSpellCastIndex);
     data << spellCastData.Immunities;
     data << spellCastData.Predict;
     data.WriteBits(spellCastData.HitTargets.size(), 16);
     data.WriteBits(spellCastData.MissTargets.size(), 16);
-    data.WriteBits(spellCastData.HitStatus.size(), 16);
     data.WriteBits(spellCastData.MissStatus.size(), 16);
     data.WriteBits(spellCastData.RemainingPower.size(), 9);
     data.WriteBit(spellCastData.RemainingRunes.has_value());
     data.WriteBits(spellCastData.TargetPoints.size(), 16);
+    data.WriteBit(spellCastData.Unknown340_1.has_value());
+    data.WriteBit(spellCastData.Unknown340_2.has_value());
     data.FlushBits();
 
     for (WorldPackets::Spells::SpellMissStatus const& missStatus : spellCastData.MissStatus)
@@ -425,9 +418,6 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Spells::SpellCastData con
     for (ObjectGuid const& missTarget : spellCastData.MissTargets)
         data << missTarget;
 
-    for (WorldPackets::Spells::SpellHitStatus const& hitStatus : spellCastData.HitStatus)
-        data << hitStatus;
-
     for (WorldPackets::Spells::SpellPowerData const& power : spellCastData.RemainingPower)
         data << power;
 
@@ -436,6 +426,12 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Spells::SpellCastData con
 
     for (WorldPackets::Spells::TargetLocation const& targetLoc : spellCastData.TargetPoints)
         data << targetLoc;
+
+    if (spellCastData.Unknown340_1)
+        data << *spellCastData.Unknown340_1;
+
+    if (spellCastData.Unknown340_2)
+        data << *spellCastData.Unknown340_2;
 
     return data;
 }
@@ -499,7 +495,7 @@ WorldPacket const* WorldPackets::Spells::SpellFailure::Write()
     _worldPacket << CasterUnit;
     _worldPacket << CastID;
     _worldPacket << int32(SpellID);
-    _worldPacket << Visual;
+    _worldPacket << int32(SpellXSpellVisualID);
     _worldPacket << uint16(Reason);
 
     return &_worldPacket;
@@ -510,7 +506,7 @@ WorldPacket const* WorldPackets::Spells::SpellFailedOther::Write()
     _worldPacket << CasterUnit;
     _worldPacket << CastID;
     _worldPacket << uint32(SpellID);
-    _worldPacket << Visual;
+    _worldPacket << int32(SpellXSpellVisualID);
     _worldPacket << uint8(Reason);
 
     return &_worldPacket;
@@ -520,7 +516,7 @@ WorldPacket const* WorldPackets::Spells::CastFailed::Write()
 {
     _worldPacket << CastID;
     _worldPacket << int32(SpellID);
-    _worldPacket << Visual;
+    _worldPacket << int32(SpellXSpellVisualID);
     _worldPacket << int32(Reason);
     _worldPacket << int32(FailedArg1);
     _worldPacket << int32(FailedArg2);
