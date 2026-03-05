@@ -72,7 +72,7 @@ void WorldSession::HandleUseToy(WorldPackets::Toy::UseToy& packet)
     SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(packet.Cast.SpellID, DIFFICULTY_NONE);
     if (!spellInfo)
     {
-        TC_LOG_ERROR("network", "HandleUseToy: unknown spell id: %u used by Toy Item entry %u", packet.Cast.SpellID, itemId);
+        TC_LOG_ERROR("network", "HandleUseToy: unknown spell id: {} used by Toy Item entry {}", packet.Cast.SpellID, itemId);
         return;
     }
 
@@ -90,8 +90,7 @@ void WorldSession::HandleUseToy(WorldPackets::Toy::UseToy& packet)
 
     spell->m_fromClient = true;
     spell->m_castItemEntry = itemId;
-    spell->m_misc.Raw.Data[0] = packet.Cast.Misc[0];
-    spell->m_misc.Raw.Data[1] = packet.Cast.Misc[1];
+    std::ranges::copy(packet.Cast.Misc, std::ranges::begin(spell->m_misc.Raw.Data));
     spell->m_castFlagsEx |= CAST_FLAG_EX_USE_TOY_SPELL;
     spell->prepare(targets);
 }

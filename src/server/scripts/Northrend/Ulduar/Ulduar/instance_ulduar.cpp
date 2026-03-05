@@ -34,53 +34,51 @@ static BossBoundaryData const boundaries =
     { DATA_IGNIS, new RectangleBoundary(495.0f, 680.0f, 90.0f, 400.0f) },
     { DATA_RAZORSCALE, new RectangleBoundary(370.0f, 810.0f, -542.0f, -55.0f) },
     { DATA_XT002, new RectangleBoundary(755.0f, 940.0f, -125.0f, 95.0f) },
-    { DATA_ASSEMBLY_OF_IRON, new CircleBoundary(Position(1587.2f, 121.0f), 90.0) },
-    { DATA_ALGALON, new CircleBoundary(Position(1632.668f, -307.7656f), 45.0) },
+    { DATA_ASSEMBLY_OF_IRON, new CircleBoundary(Position(1587.2f, 121.0f), 90.0f) },
+    { DATA_ALGALON, new CircleBoundary(Position(1632.668f, -307.7656f), 45.0f) },
     { DATA_ALGALON, new ZRangeBoundary(410.0f, 470.0f) },
-    { DATA_HODIR, new EllipseBoundary(Position(2001.5f, -240.0f), 50.0, 75.0) },
+    { DATA_HODIR, new EllipseBoundary(Position(2001.5f, -240.0f), 50.0f, 75.0f) },
     // Thorim sets boundaries dynamically
     { DATA_FREYA, new RectangleBoundary(2094.6f, 2520.0f, -250.0f, 200.0f) },
-    { DATA_MIMIRON, new CircleBoundary(Position(2744.0f, 2569.0f), 70.0) },
+    { DATA_MIMIRON, new CircleBoundary(Position(2744.0f, 2569.0f), 70.0f) },
     { DATA_VEZAX, new RectangleBoundary(1740.0f, 1930.0f, 31.0f, 228.0f) },
-    { DATA_YOGG_SARON, new CircleBoundary(Position(1980.42f, -27.68f), 105.0) }
+    { DATA_YOGG_SARON, new CircleBoundary(Position(1980.42f, -27.68f), 105.0f) }
 };
 
-static DoorData const doorData[] =
+static constexpr DoorData doorData[] =
 {
-    { GO_LEVIATHAN_DOOR,                DATA_FLAME_LEVIATHAN,   DOOR_TYPE_ROOM },
-    { GO_XT_002_DOOR,                   DATA_XT002,             DOOR_TYPE_ROOM },
-    { GO_IRON_COUNCIL_DOOR,             DATA_ASSEMBLY_OF_IRON,  DOOR_TYPE_ROOM },
-    { GO_ARCHIVUM_DOOR,                 DATA_ASSEMBLY_OF_IRON,  DOOR_TYPE_PASSAGE },
-    { GO_HODIR_ENTRANCE,                DATA_HODIR,             DOOR_TYPE_ROOM },
-    { GO_HODIR_DOOR,                    DATA_HODIR,             DOOR_TYPE_PASSAGE },
-    { GO_HODIR_ICE_DOOR,                DATA_HODIR,             DOOR_TYPE_PASSAGE },
-    { GO_MIMIRON_DOOR_1,                DATA_MIMIRON,           DOOR_TYPE_ROOM },
-    { GO_MIMIRON_DOOR_2,                DATA_MIMIRON,           DOOR_TYPE_ROOM },
-    { GO_MIMIRON_DOOR_3,                DATA_MIMIRON,           DOOR_TYPE_ROOM },
-    { GO_THORIM_ENCOUNTER_DOOR,         DATA_THORIM,            DOOR_TYPE_ROOM },
-    { GO_ANCIENT_GATE_OF_THE_KEEPERS,   DATA_HODIR,             DOOR_TYPE_PASSAGE },
-    { GO_ANCIENT_GATE_OF_THE_KEEPERS,   DATA_MIMIRON,           DOOR_TYPE_PASSAGE },
-    { GO_ANCIENT_GATE_OF_THE_KEEPERS,   DATA_THORIM,            DOOR_TYPE_PASSAGE },
-    { GO_ANCIENT_GATE_OF_THE_KEEPERS,   DATA_FREYA,             DOOR_TYPE_PASSAGE },
-    { GO_VEZAX_DOOR,                    DATA_VEZAX,             DOOR_TYPE_PASSAGE },
-    { GO_YOGG_SARON_DOOR,               DATA_YOGG_SARON,        DOOR_TYPE_ROOM },
-    { GO_DOODAD_UL_SIGILDOOR_03,        DATA_ALGALON,           DOOR_TYPE_ROOM },
-    { GO_DOODAD_UL_UNIVERSEFLOOR_01,    DATA_ALGALON,           DOOR_TYPE_ROOM },
-    { GO_DOODAD_UL_UNIVERSEFLOOR_02,    DATA_ALGALON,           DOOR_TYPE_SPAWN_HOLE },
-    { GO_DOODAD_UL_UNIVERSEGLOBE01,     DATA_ALGALON,           DOOR_TYPE_SPAWN_HOLE },
-    { GO_DOODAD_UL_ULDUAR_TRAPDOOR_03,  DATA_ALGALON,           DOOR_TYPE_SPAWN_HOLE },
-    { 0,                                0,                      DOOR_TYPE_ROOM },
+    { GO_LEVIATHAN_DOOR,                DATA_FLAME_LEVIATHAN,   EncounterDoorBehavior::OpenWhenNotInProgress },
+    { GO_XT_002_DOOR,                   DATA_XT002,             EncounterDoorBehavior::OpenWhenNotInProgress },
+    { GO_IRON_COUNCIL_DOOR,             DATA_ASSEMBLY_OF_IRON,  EncounterDoorBehavior::OpenWhenNotInProgress },
+    { GO_ARCHIVUM_DOOR,                 DATA_ASSEMBLY_OF_IRON,  EncounterDoorBehavior::OpenWhenDone },
+    { GO_HODIR_ENTRANCE,                DATA_HODIR,             EncounterDoorBehavior::OpenWhenNotInProgress },
+    { GO_HODIR_DOOR,                    DATA_HODIR,             EncounterDoorBehavior::OpenWhenDone },
+    { GO_HODIR_ICE_DOOR,                DATA_HODIR,             EncounterDoorBehavior::OpenWhenDone },
+    { GO_MIMIRON_DOOR_1,                DATA_MIMIRON,           EncounterDoorBehavior::OpenWhenNotInProgress },
+    { GO_MIMIRON_DOOR_2,                DATA_MIMIRON,           EncounterDoorBehavior::OpenWhenNotInProgress },
+    { GO_MIMIRON_DOOR_3,                DATA_MIMIRON,           EncounterDoorBehavior::OpenWhenNotInProgress },
+    { GO_THORIM_ENCOUNTER_DOOR,         DATA_THORIM,            EncounterDoorBehavior::OpenWhenNotInProgress },
+    { GO_ANCIENT_GATE_OF_THE_KEEPERS,   DATA_HODIR,             EncounterDoorBehavior::OpenWhenDone },
+    { GO_ANCIENT_GATE_OF_THE_KEEPERS,   DATA_MIMIRON,           EncounterDoorBehavior::OpenWhenDone },
+    { GO_ANCIENT_GATE_OF_THE_KEEPERS,   DATA_THORIM,            EncounterDoorBehavior::OpenWhenDone },
+    { GO_ANCIENT_GATE_OF_THE_KEEPERS,   DATA_FREYA,             EncounterDoorBehavior::OpenWhenDone },
+    { GO_VEZAX_DOOR,                    DATA_VEZAX,             EncounterDoorBehavior::OpenWhenDone },
+    { GO_YOGG_SARON_DOOR,               DATA_YOGG_SARON,        EncounterDoorBehavior::OpenWhenNotInProgress },
+    { GO_DOODAD_UL_SIGILDOOR_03,        DATA_ALGALON,           EncounterDoorBehavior::OpenWhenNotInProgress },
+    { GO_DOODAD_UL_UNIVERSEFLOOR_01,    DATA_ALGALON,           EncounterDoorBehavior::OpenWhenNotInProgress },
+    { GO_DOODAD_UL_UNIVERSEFLOOR_02,    DATA_ALGALON,           EncounterDoorBehavior::OpenWhenInProgress },
+    { GO_DOODAD_UL_UNIVERSEGLOBE01,     DATA_ALGALON,           EncounterDoorBehavior::OpenWhenInProgress },
+    { GO_DOODAD_UL_ULDUAR_TRAPDOOR_03,  DATA_ALGALON,           EncounterDoorBehavior::OpenWhenInProgress },
 };
 
-MinionData const minionData[] =
+static constexpr MinionData minionData[] =
 {
     { NPC_STEELBREAKER,   DATA_ASSEMBLY_OF_IRON },
     { NPC_MOLGEIM,        DATA_ASSEMBLY_OF_IRON },
     { NPC_BRUNDIR,        DATA_ASSEMBLY_OF_IRON },
-    { 0,                  0                     } // END
 };
 
-ObjectData const creatureData[] =
+static constexpr ObjectData creatureData[] =
 {
     { NPC_FLAME_LEVIATHAN,          DATA_FLAME_LEVIATHAN          },
     { NPC_IGNIS,                    DATA_IGNIS                    },
@@ -114,10 +112,9 @@ ObjectData const creatureData[] =
     { NPC_BRONZEBEARD_RADIO,        DATA_BRONZEBEARD_RADIO        },
     { NPC_HEART_OF_DECONSTRUCTOR,   DATA_XT002_HEART              },
     { NPC_AZEROTH,                  DATA_AZEROTH                  },
-    { 0,                            0,                            }
 };
 
-ObjectData const objectData[] =
+static constexpr ObjectData objectData[] =
 {
     { GO_MIMIRON_ELEVATOR,             DATA_MIMIRON_ELEVATOR     },
     { GO_MIMIRON_BUTTON,               DATA_MIMIRON_BUTTON       },
@@ -137,10 +134,9 @@ ObjectData const objectData[] =
     { GO_DOODAD_UL_UNIVERSEFLOOR_02,   DATA_UNIVERSE_FLOOR_02    },
     { GO_GIFT_OF_THE_OBSERVER_10,      DATA_GIFT_OF_THE_OBSERVER },
     { GO_GIFT_OF_THE_OBSERVER_25,      DATA_GIFT_OF_THE_OBSERVER },
-    { 0,                               0                         }
 };
 
-DungeonEncounterData const encounters[] =
+static constexpr DungeonEncounterData encounters[] =
 {
     { DATA_FLAME_LEVIATHAN, {{ 1132 }} },
     { DATA_IGNIS, {{ 1136 }} },
@@ -191,7 +187,6 @@ class instance_ulduar : public InstanceMapScript
 
                 _maxArmorItemLevel = 0;
                 _maxWeaponItemLevel = 0;
-                TeamInInstance = 0;
                 HodirRareCacheData = 0;
                 ColossusData = 0;
                 elderCount = 0;
@@ -234,7 +229,6 @@ class instance_ulduar : public InstanceMapScript
             ObjectGuid BrainRoomDoorGUIDs[3];
 
             // Miscellaneous
-            uint32 TeamInInstance;
             uint32 HodirRareCacheData;
             uint32 ColossusData;
             uint8 elderCount;
@@ -245,11 +239,8 @@ class instance_ulduar : public InstanceMapScript
             bool Unbroken;
             bool IsDriveMeCrazyEligible;
 
-            void OnPlayerEnter(Player* player) override
+            void OnPlayerEnter(Player* /*player*/) override
             {
-                if (!TeamInInstance)
-                    TeamInInstance = player->GetTeam();
-
                 if (_summonAlgalon)
                 {
                     _summonAlgalon = false;
@@ -412,37 +403,29 @@ class instance_ulduar : public InstanceMapScript
 
             uint32 GetCreatureEntry(ObjectGuid::LowType /*guidLow*/, CreatureData const* data) override
             {
-                if (!TeamInInstance)
-                {
-                    Map::PlayerList const& Players = instance->GetPlayers();
-                    if (!Players.isEmpty())
-                        if (Player* player = Players.begin()->GetSource())
-                            TeamInInstance = player->GetTeam();
-                }
-
                 uint32 entry = data->id;
                 switch (entry)
                 {
                     case NPC_EIVI_NIGHTFEATHER:
-                        return TeamInInstance == HORDE ? NPC_TOR_GREYCLOUD : NPC_EIVI_NIGHTFEATHER;
+                        return instance->GetTeamInInstance() == HORDE ? NPC_TOR_GREYCLOUD : NPC_EIVI_NIGHTFEATHER;
                     case NPC_ELLIE_NIGHTFEATHER:
-                        return TeamInInstance == HORDE ? NPC_KAR_GREYCLOUD : NPC_ELLIE_NIGHTFEATHER;
+                        return instance->GetTeamInInstance() == HORDE ? NPC_KAR_GREYCLOUD : NPC_ELLIE_NIGHTFEATHER;
                     case NPC_ELEMENTALIST_MAHFUUN:
-                        return TeamInInstance == HORDE ? NPC_SPIRITWALKER_TARA : NPC_ELEMENTALIST_MAHFUUN;
+                        return instance->GetTeamInInstance() == HORDE ? NPC_SPIRITWALKER_TARA : NPC_ELEMENTALIST_MAHFUUN;
                     case NPC_ELEMENTALIST_AVUUN:
-                        return TeamInInstance == HORDE ? NPC_SPIRITWALKER_YONA : NPC_ELEMENTALIST_AVUUN;
+                        return instance->GetTeamInInstance() == HORDE ? NPC_SPIRITWALKER_YONA : NPC_ELEMENTALIST_AVUUN;
                     case NPC_MISSY_FLAMECUFFS:
-                        return TeamInInstance == HORDE ? NPC_AMIRA_BLAZEWEAVER : NPC_MISSY_FLAMECUFFS;
+                        return instance->GetTeamInInstance() == HORDE ? NPC_AMIRA_BLAZEWEAVER : NPC_MISSY_FLAMECUFFS;
                     case NPC_SISSY_FLAMECUFFS:
-                        return TeamInInstance == HORDE ? NPC_VEESHA_BLAZEWEAVER : NPC_SISSY_FLAMECUFFS;
+                        return instance->GetTeamInInstance() == HORDE ? NPC_VEESHA_BLAZEWEAVER : NPC_SISSY_FLAMECUFFS;
                     case NPC_FIELD_MEDIC_PENNY:
-                        return TeamInInstance == HORDE ? NPC_BATTLE_PRIEST_ELIZA : NPC_FIELD_MEDIC_PENNY;
+                        return instance->GetTeamInInstance() == HORDE ? NPC_BATTLE_PRIEST_ELIZA : NPC_FIELD_MEDIC_PENNY;
                     case NPC_FIELD_MEDIC_JESSI:
-                        return TeamInInstance == HORDE ? NPC_BATTLE_PRIEST_GINA : NPC_FIELD_MEDIC_JESSI;
+                        return instance->GetTeamInInstance() == HORDE ? NPC_BATTLE_PRIEST_GINA : NPC_FIELD_MEDIC_JESSI;
                     case NPC_MERCENARY_CAPTAIN_H:
-                        return TeamInInstance == HORDE ? NPC_MERCENARY_CAPTAIN_A : NPC_MERCENARY_CAPTAIN_H;
+                        return instance->GetTeamInInstance() == HORDE ? NPC_MERCENARY_CAPTAIN_A : NPC_MERCENARY_CAPTAIN_H;
                     case NPC_MERCENARY_SOLDIER_H:
-                        return TeamInInstance == HORDE ? NPC_MERCENARY_SOLDIER_A : NPC_MERCENARY_SOLDIER_H;
+                        return instance->GetTeamInInstance() == HORDE ? NPC_MERCENARY_SOLDIER_A : NPC_MERCENARY_SOLDIER_H;
                     default:
                         return entry;
                 }
@@ -953,15 +936,15 @@ class instance_ulduar : public InstanceMapScript
                 if (Vehicle* vehicle = vehicleCreature->GetVehicleKit())
                 {
                     vehicle->RemoveAllPassengers();
-                    vehicleCreature->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
+                    vehicleCreature->SetUninteractible(true);
                     vehicleCreature->DespawnOrUnsummon(5min);
                 }
             }
 
             void UpdateDoorState(GameObject* door) override
             {
-                // Leviathan doors are set to DOOR_TYPE_ROOM except the one it uses to enter the room
-                // which has to be set to DOOR_TYPE_PASSAGE
+                // Leviathan doors are set to EncounterStateForOpenDoor::NotInProgress except the one it uses to enter the room
+                // which has to be set to EncounterStateForOpenDoor::Done
                 if (door->GetEntry() == GO_LEVIATHAN_DOOR && door->GetPositionX() > 400.f)
                     door->SetGoState(GetBossState(DATA_FLAME_LEVIATHAN) == DONE ? GO_STATE_ACTIVE : GO_STATE_READY);
                 else
@@ -975,9 +958,9 @@ class instance_ulduar : public InstanceMapScript
                 if (door->GetEntry() == GO_LEVIATHAN_DOOR && door->GetPositionX() > 400.f)
                 {
                     if (add)
-                        GetBossInfo(DATA_FLAME_LEVIATHAN)->door[DOOR_TYPE_PASSAGE].insert(door->GetGUID());
+                        GetBossInfo(DATA_FLAME_LEVIATHAN)->door[uint32(EncounterDoorBehavior::OpenWhenDone)].insert(door->GetGUID());
                     else
-                        GetBossInfo(DATA_FLAME_LEVIATHAN)->door[DOOR_TYPE_PASSAGE].erase(door->GetGUID());
+                        GetBossInfo(DATA_FLAME_LEVIATHAN)->door[uint32(EncounterDoorBehavior::OpenWhenDone)].erase(door->GetGUID());
 
                     if (add)
                         UpdateDoorState(door);

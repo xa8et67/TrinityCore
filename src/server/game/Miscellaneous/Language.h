@@ -225,7 +225,6 @@ enum TrinityStrings
     LANG_PHASESHIFT_UI_WORLD_MAP_AREA_SWAPS = 182,
     LANG_PHASE_FLAG_COSMETIC              = 183,
     LANG_PHASE_FLAG_PERSONAL              = 184,
-
     //                                      185 not used
     LANG_TRANSPORT_POSITION               = 186,
     LANG_PARTIAL_GROUP_SUMMON             = 187,
@@ -344,8 +343,8 @@ enum TrinityStrings
     LANG_COMMAND_NPC_SHOWLOOT_MONEY       = 292,
     LANG_COMMAND_NPC_SHOWLOOT_LABEL_2     = 293,
     LANG_COMMAND_NPC_SHOWLOOT_SUBLABEL    = 294,
-    LANG_COMMAND_NPC_SHOWLOOT_ENTRY_2     = 295,
-      // 296 free
+    LANG_COMMAND_NPC_SHOWLOOT_TRACKING_QUEST = 295,
+    LANG_COMMAND_NPC_SHOWLOOT_CURRENCY    = 296,
 
       // END
     LANG_COMMAND_WANDER_DISTANCE          = 297,
@@ -448,7 +447,11 @@ enum TrinityStrings
     LANG_COMMAND_LEARN_ALL_RECIPES_HELP   = 392,
     LANG_COMMAND_LEARN_ALL_TALENTS_HELP   = 393,
     LANG_COMMAND_LEARN_ALL_PETTALENT_HELP = 394,
-    // Room for more level 2                395-399 not used
+    LANG_COMMAND_BG_START_HELP            = 395, // 3.3.5 RESERVED
+    LANG_COMMAND_BG_STOP_HELP             = 396, // 3.3.5 RESERVED
+    LANG_CHANGEFACTION_NOT_ELIGIBLE_10    = 397, // 3.3.5 RESERVED
+    LANG_CHANGEFACTION_NOT_ELIGIBLE_60    = 398, // 3.3.5 RESERVED
+    // Room for more level 2                399 not used
 
     // level 3 chat
     LANG_SCRIPTS_RELOADED                 = 400,
@@ -759,7 +762,7 @@ enum TrinityStrings
     LANG_NEED_CHARACTER_NAME              = 807,
     LANG_PLAYER_NOT_EXIST_OR_OFFLINE      = 808,
     LANG_ACCOUNT_FOR_PLAYER_NOT_FOUND     = 809,
-    // unused                             = 810,
+    LANG_BANK_TAB_NAME                    = 810,
     LANG_GUILD_MASTER                     = 811,
     LANG_GUILD_OFFICER                    = 812,
     LANG_GUILD_VETERAN                    = 813,
@@ -992,7 +995,13 @@ enum TrinityStrings
     LANG_ACCOUNT_BNET_UNLINKED            = 1216,
     LANG_ACCOUNT_BNET_NOT_LINKED          = 1217,
     LANG_DISALLOW_TICKETS_CONFIG          = 1218,
-    // 1219-1499 - free
+
+    // Guild list (.guild list)
+    LANG_GUILD_LIST_TITLE                 = 1219,
+    LANG_GUILD_LIST_HEADER                = 1220,
+    LANG_GUILD_LIST_ROW                   = 1221,
+    LANG_GUILD_LIST_TOTAL                 = 1222,
+    // 1223-1499 - free
 
     // Command argument parsers
     LANG_CMDPARSER_EITHER                 = 1500,
@@ -1014,7 +1023,9 @@ enum TrinityStrings
     LANG_CMDPARSER_CURRENCY_NO_EXIST      = 1516,
     LANG_CMDPARSER_QUEST_NO_EXIST         = 1517,
 
-    // 1516-1998 - free
+    // 1516-1996 - free
+    LANG_DEBUG_AREATRIGGER_ENTITY_ENTERED = 1997,
+    LANG_DEBUG_AREATRIGGER_ENTITY_LEFT    = 1998,
     LANG_DEBUG_AREATRIGGER_LEFT           = 1999,
     // Ticket Strings 2000-2030
     LANG_COMMAND_TICKETNEW                = 2000, // 3.3.5 RESERVED
@@ -1107,7 +1118,7 @@ enum TrinityStrings
     LANG_COMMAND_INST_STAT_PLAYERS_IN     = 5051,
     LANG_COMMAND_INST_STAT_SAVES          = 5052,
     LANG_COMMAND_INST_STAT_PLAYERSBOUND   = 5053,
-    //                                    = 5054, // old LANG_COMMAND_INST_STAT_GROUPSBOUND
+    LANG_COMMAND_INST_STAT_GROUPSBOUND    = 5054, // 3.3.5 RESERVED
     LANG_NOT_DUNGEON                      = 5055, // Map is not a dungeon.
     LANG_NO_INSTANCE_DATA                 = 5056, // Map has no instance data.
     LANG_COMMAND_INST_SET_BOSS_STATE      = 5057,
@@ -1148,8 +1159,9 @@ enum TrinityStrings
     LANG_NPCINFO_NPC_FLAGS                = 5086,
     LANG_NPCINFO_PHASE_IDS                = 5087,
     LANG_SCENARIO                         = 5088,
+    LANG_OBJECTINFO_STRINGIDS             = 5089,
 
-    // Room for more Trinity strings        5089-6603
+    // Room for more Trinity strings        5090-6603
 
     // Level requirement notifications
     LANG_SAY_REQ                          = 6604,
@@ -1205,7 +1217,11 @@ enum TrinityStrings
     LANG_OPVP_ZM_GOSSIP_ALLIANCE          = 10054,
     LANG_OPVP_ZM_GOSSIP_HORDE             = 10055,
 
-    // 10056-10066 - free
+    // Deephaul Ravine
+    LANG_BG_DR_CRYSTAL_TAKEN              = 10056,
+    LANG_BG_DR_CRYSTAL_TAKEN_TUTORIAL     = 10057,
+
+    // 10058-10066 - free
 
     // Use for custom patches               11000-11999
     LANG_AUTO_BROADCAST                   = 11000,

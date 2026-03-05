@@ -27,8 +27,9 @@
 
 Bag::Bag(): Item()
 {
-    m_objectType |= TYPEMASK_CONTAINER;
     m_objectTypeId = TYPEID_CONTAINER;
+
+    m_entityFragments.Add(WowCS::EntityFragment::Tag_Container, false);
 
     memset(m_bagslot, 0, sizeof(Item*) * MAX_BAG_SIZE);
 }
@@ -40,7 +41,7 @@ Bag::~Bag()
         {
             if (item->IsInWorld())
             {
-                TC_LOG_FATAL("entities.player.items", "Item %u (slot %u, bag slot %u) in bag %u (slot %u, bag slot %u, m_bagslot %u) is to be deleted but is still in world.",
+                TC_LOG_FATAL("entities.player.items", "Item {} (slot {}, bag slot {}) in bag {} (slot {}, bag slot {}, m_bagslot {}) is to be deleted but is still in world.",
                     item->GetEntry(), (uint32)item->GetSlot(), (uint32)item->GetBagSlot(),
                     GetEntry(), (uint32)GetSlot(), (uint32)GetBagSlot(), (uint32)i);
                 item->RemoveFromWorld();
@@ -74,7 +75,7 @@ bool Bag::Create(ObjectGuid::LowType guidlow, uint32 itemid, ItemContext context
     if (!itemProto || itemProto->GetContainerSlots() > MAX_BAG_SIZE)
         return false;
 
-    Object::_Create(ObjectGuid::Create<HighGuid::Item>(guidlow));
+    _Create(ObjectGuid::Create<HighGuid::Item>(guidlow));
 
     _bonusData.Initialize(itemProto);
 
@@ -182,35 +183,25 @@ void Bag::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) cons
             m_bagslot[i]->BuildCreateUpdateBlockForPlayer(data, target);
 }
 
-void Bag::BuildValuesCreate(ByteBuffer* data, Player const* target) const
+void Bag::BuildValuesCreate(UF::UpdateFieldFlag flags, ByteBuffer& data, Player const* target) const
 {
-    UF::UpdateFieldFlag flags = GetUpdateFieldFlagsFor(target);
-    std::size_t sizePos = data->wpos();
-    *data << uint32(0);
-    *data << uint8(flags);
-    m_objectData->WriteCreate(*data, flags, this, target);
-    m_itemData->WriteCreate(*data, flags, this, target);
-    m_containerData->WriteCreate(*data, flags, this, target);
-    data->put<uint32>(sizePos, data->wpos() - sizePos - 4);
+    m_objectData->WriteCreate(flags, data, target, this);
+    m_itemData->WriteCreate(flags, data, target, this);
+    m_containerData->WriteCreate(flags, data, target, this);
 }
 
-void Bag::BuildValuesUpdate(ByteBuffer* data, Player const* target) const
+void Bag::BuildValuesUpdate(UF::UpdateFieldFlag flags, ByteBuffer& data, Player const* target) const
 {
-    UF::UpdateFieldFlag flags = GetUpdateFieldFlagsFor(target);
-    std::size_t sizePos = data->wpos();
-    *data << uint32(0);
-    *data << uint32(m_values.GetChangedObjectTypeMask());
+    data << uint32(m_values.GetChangedObjectTypeMask());
 
     if (m_values.HasChanged(TYPEID_OBJECT))
-        m_objectData->WriteUpdate(*data, flags, this, target);
+        m_objectData->WriteUpdate(flags, data, target, this);
 
     if (m_values.HasChanged(TYPEID_ITEM))
-        m_itemData->WriteUpdate(*data, flags, this, target);
+        m_itemData->WriteUpdate(flags, data, target, this);
 
     if (m_values.HasChanged(TYPEID_CONTAINER))
-        m_containerData->WriteUpdate(*data, flags, this, target);
-
-    data->put<uint32>(sizePos, data->wpos() - sizePos - 4);
+        m_containerData->WriteUpdate(flags, data, target, this);
 }
 
 void Bag::BuildValuesUpdateForPlayerWithMask(UpdateData* data, UF::ObjectData::Mask const& requestedObjectMask,
@@ -222,7 +213,7 @@ void Bag::BuildValuesUpdateForPlayerWithMask(UpdateData* data, UF::ObjectData::M
         valuesMask.Set(TYPEID_OBJECT);
 
     UF::ItemData::Mask itemMask = requestedItemMask;
-    m_itemData->FilterDisallowedFieldsMaskForFlag(itemMask, flags);
+    UF::ItemData::FilterDisallowedFieldsMaskForFlag(itemMask, flags);
     if (itemMask.IsAnySet())
         valuesMask.Set(TYPEID_ITEM);
 
@@ -232,16 +223,17 @@ void Bag::BuildValuesUpdateForPlayerWithMask(UpdateData* data, UF::ObjectData::M
     ByteBuffer& buffer = PrepareValuesUpdateBuffer(data);
     std::size_t sizePos = buffer.wpos();
     buffer << uint32(0);
+    BuildEntityFragmentsForValuesUpdateForPlayerWithMask(buffer, flags);
     buffer << uint32(valuesMask.GetBlock(0));
 
     if (valuesMask[TYPEID_OBJECT])
-        m_objectData->WriteUpdate(buffer, requestedObjectMask, true, this, target);
+        m_objectData->WriteUpdate(requestedObjectMask, buffer, target, this, true);
 
     if (valuesMask[TYPEID_ITEM])
-        m_itemData->WriteUpdate(buffer, itemMask, true, this, target);
+        m_itemData->WriteUpdate(itemMask, buffer, target, this, true);
 
     if (valuesMask[TYPEID_CONTAINER])
-        m_containerData->WriteUpdate(buffer, requestedContainerMask, true, this, target);
+        m_containerData->WriteUpdate(requestedContainerMask, buffer, target, this, true);
 
     buffer.put<uint32>(sizePos, buffer.wpos() - sizePos - 4);
 
@@ -259,10 +251,10 @@ void Bag::ValuesUpdateForPlayerWithMaskSender::operator()(Player const* player) 
     player->SendDirectMessage(&packet);
 }
 
-void Bag::ClearUpdateMask(bool remove)
+void Bag::ClearValuesChangesMask()
 {
     m_values.ClearChangesMask(&Bag::m_containerData);
-    Item::ClearUpdateMask(remove);
+    Item::ClearValuesChangesMask();
 }
 
 // If the bag is empty returns true

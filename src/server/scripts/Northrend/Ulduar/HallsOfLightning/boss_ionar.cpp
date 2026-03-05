@@ -58,9 +58,10 @@ enum Creatures
 enum Misc
 {
     DATA_MAX_SPARKS                               = 5,
-    DATA_MAX_SPARK_DISTANCE                       = 90, // Distance to boss - prevent runs through the whole instance
     DATA_POINT_CALLBACK                           = 0
 };
+
+static constexpr float DATA_MAX_SPARK_DISTANCE = 90; // Distance to boss - prevent runs through the whole instance
 
 /*######
 ## Boss Ionar
@@ -92,7 +93,8 @@ struct boss_ionar : public BossAI
 
         Initialize();
 
-        me->RemoveUnitFlag(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_UNINTERACTIBLE);
+        me->RemoveUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
+        me->SetUninteractible(false);
         me->SetControlled(false, UNIT_STATE_ROOT);
 
         if (!me->IsVisible())
@@ -128,7 +130,8 @@ struct boss_ionar : public BossAI
 
             me->AttackStop();
             me->SetVisible(false);
-            me->SetUnitFlag(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_UNINTERACTIBLE);
+            me->SetUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
+            me->SetUninteractible(true);
             me->SetControlled(true, UNIT_STATE_ROOT);
 
             me->GetMotionMaster()->Clear();
@@ -212,7 +215,8 @@ struct boss_ionar : public BossAI
                 else if (summons.empty())
                 {
                     me->SetVisible(true);
-                    me->RemoveUnitFlag(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_UNINTERACTIBLE);
+                    me->RemoveUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
+                    me->SetUninteractible(false);
                     me->SetControlled(false, UNIT_STATE_ROOT);
 
                     DoCast(me, SPELL_SPARK_DESPAWN, false);
@@ -260,8 +264,6 @@ struct boss_ionar : public BossAI
 
             DoCast(me, SPELL_DISPERSE, false);
         }
-
-        DoMeleeAttackIfReady();
     }
 
 private:

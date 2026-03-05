@@ -23,27 +23,34 @@
 
 namespace WorldPackets::Crafting
 {
+struct CraftingReagentBase
+{
+    Optional<int32> ItemID;
+    Optional<int32> CurrencyID;
+};
+
 struct SpellReducedReagent
 {
-    int32 ItemID = 0;
+    CraftingReagentBase Reagent;
     int32 Quantity = 0;
 };
 
 struct CraftingData
 {
     int32 CraftingQualityID = 0;
-    int32 field_4 = 0;
-    int32 field_8 = 0;
+    float QualityProgress = 0.0f;
+    int32 SkillLineAbilityID = 0;
+    int32 CraftingDataID = 0;
     int32 Multicraft = 0;
-    int32 field_10 = 0;
-    int32 field_14 = 0;
+    int32 SkillFromReagents = 0;
+    int32 Skill = 0;
     int32 CritBonusSkill = 0;
-    float field_1C = 0.0f;
-    uint64 field_20 = 0;
+    float ModSkillGain = 0.0f;
+    uint64 OrderID = 0;
     bool IsCrit = false;
-    bool field_29 = false;
-    bool field_2A = false;
-    bool BonusCraft = false;
+    bool IsRecraft = false;
+    bool IsInitialRecraft = false;
+    bool IsFirstCraft = false;
     std::vector<SpellReducedReagent> ResourcesReturned;
     uint32 OperationID = 0;
     ObjectGuid ItemGUID;
@@ -51,8 +58,15 @@ struct CraftingData
     Item::ItemInstance OldItem;
     Item::ItemInstance NewItem;
     int32 EnchantID = 0;
+    int32 ConcentrationCurrencyID = 0;
+    int32 ConcentrationSpent = 0;
+    int32 IngenuityRefund = 0;
+    bool HasIngenuityProc = false;
+    bool ApplyConcentration = false;
 };
 
+ByteBuffer& operator>>(ByteBuffer& data, CraftingReagentBase& reagent);
+ByteBuffer& operator<<(ByteBuffer& data, CraftingReagentBase const& reagent);
 ByteBuffer& operator<<(ByteBuffer& data, SpellReducedReagent const& spellReducedReagent);
 ByteBuffer& operator<<(ByteBuffer& data, CraftingData const& craftingData);
 }

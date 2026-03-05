@@ -36,8 +36,18 @@
 // Local structures
 
 // In-memory layout of the TVFS file header
-typedef struct _TVFS_DIRECTORY_HEADER
+struct TVFS_DIRECTORY_HEADER
 {
+    TVFS_DIRECTORY_HEADER()
+    {
+        memset(this, 0, sizeof(TVFS_DIRECTORY_HEADER) - FIELD_OFFSET(TVFS_DIRECTORY_HEADER, Data));
+    }
+
+    LPBYTE DataAt(DWORD dwOffset)
+    {
+        return Data.pbData + dwOffset;
+    }
+
     DWORD Signature;                                // Must be CASC_TVFS_ROOT_SIGNATURE
     BYTE  FormatVersion;                            // Version of the format. Should be 1.
     BYTE  HeaderSize;                               // Size of the header, in bytes
@@ -59,9 +69,8 @@ typedef struct _TVFS_DIRECTORY_HEADER
     DWORD  CftOffsSize;                             // Byte length of the offset in the Content File Table entry
     DWORD  EstOffsSize;                             // Byte length of the offset in the Encoding Specifier Table entry
 
-    LPBYTE pbDirectoryData;                         // Pointer to the begin of directory data
-    LPBYTE pbDirectoryEnd;                          // Pointer to the end of directory data
-
+    CASC_BLOB Data;                                 // The complete directory data
+    
 //  LPBYTE pbPathFileTable;                         // Begin and end of the path table
 //  LPBYTE pbPathTableEnd;
 
@@ -71,7 +80,7 @@ typedef struct _TVFS_DIRECTORY_HEADER
 //  LPBYTE pbCftFileTable;                          // Begin and end of the content file table
 //  LPBYTE pbCftTableEnd;
 
-} TVFS_DIRECTORY_HEADER, *PTVFS_DIRECTORY_HEADER;
+};
 
 /*
 // Minimum size of a valid path table entry. 1 byte + 1-byte name + 1 byte + DWORD
@@ -96,18 +105,18 @@ typedef struct _TVFS_DIRECTORY_HEADER
 // In-memory layout of the path table entry
 typedef struct _TVFS_PATH_TABLE_ENTRY
 {
-    LPBYTE pbNamePtr;                               // Pointer to the begin of the node name
-    LPBYTE pbNameEnd;                               // Pointer to the end of the file name
+    char * m_pNamePtr;                              // Pointer to the begin of the node name
+    char * m_pNameEnd;                              // Pointer to the end of the file name
     DWORD NodeFlags;                                // TVFS_PTE_XXX
     DWORD NodeValue;                                // Node value
 } TVFS_PATH_TABLE_ENTRY, *PTVFS_PATH_TABLE_ENTRY;
 
 typedef struct _TVFS_WOW_ENTRY
 {
-    DWORD  LocaleFlags;
-    USHORT ContentFlags;
-    DWORD  FileDataId;
-    BYTE   ContentKey[MD5_HASH_SIZE];
+    DWORD LocaleFlags;
+    DWORD ContentFlags;
+    DWORD FileDataId;
+    BYTE  ContentKey[MD5_HASH_SIZE];
 } TVFS_WOW_ENTRY, *PTVFS_WOW_ENTRY;
 
 //-----------------------------------------------------------------------------
@@ -147,8 +156,8 @@ struct TRootHandler_TVFS : public TFileTreeRoot
             PathBuffer.AppendChar('/');
 
         // Append the name fragment, if any
-        if(PathEntry.pbNameEnd > PathEntry.pbNamePtr)
-            PathBuffer.AppendStringN((const char *)PathEntry.pbNamePtr, (PathEntry.pbNameEnd - PathEntry.pbNamePtr), false);
+        if(PathEntry.m_pNameEnd > PathEntry.m_pNamePtr)
+            PathBuffer.AppendStringN(PathEntry.m_pNamePtr, (PathEntry.m_pNameEnd - PathEntry.m_pNamePtr), false);
 
         // Append the postfix separator, if needed
         if(PathEntry.NodeFlags & TVFS_PTE_PATH_SEPARATOR_POST)
@@ -157,12 +166,15 @@ struct TRootHandler_TVFS : public TFileTreeRoot
         return true;
     }
 
-    static DWORD CaptureDirectoryHeader(TVFS_DIRECTORY_HEADER & DirHeader, LPBYTE pbDataPtr, LPBYTE pbDataEnd)
+    static DWORD CaptureDirectoryHeader(TVFS_DIRECTORY_HEADER & DirHeader, CASC_BLOB & Data)
     {
-        // Fill the header structure with zeros
-        memset(&DirHeader, 0, sizeof(TVFS_DIRECTORY_HEADER));
-        DirHeader.pbDirectoryData = pbDataPtr;
-        DirHeader.pbDirectoryEnd = pbDataEnd;
+        LPBYTE pbDataPtr = NULL;
+        LPBYTE pbDataEnd = NULL;
+
+        // Extract the data out of the buffer
+        DirHeader.Data.MoveFrom(Data);
+        pbDataPtr = DirHeader.Data.pbData;
+        pbDataEnd = DirHeader.Data.End();
 
         // Capture the signature
         pbDataPtr = CaptureInteger32(pbDataPtr, pbDataEnd, &DirHeader.Signature);
@@ -189,7 +201,7 @@ struct TRootHandler_TVFS : public TFileTreeRoot
         DirHeader.VfsTableSize    = ConvertBytesToInteger_4((LPBYTE)(&DirHeader.VfsTableSize));
         DirHeader.CftTableOffset  = ConvertBytesToInteger_4((LPBYTE)(&DirHeader.CftTableOffset));
         DirHeader.CftTableSize    = ConvertBytesToInteger_4((LPBYTE)(&DirHeader.CftTableSize));
-        DirHeader.MaxDepth        = (USHORT)ConvertBytesToInteger_2((LPBYTE)(&DirHeader.MaxDepth));
+        DirHeader.MaxDepth        = ConvertBytesToInteger_2((LPBYTE)(&DirHeader.MaxDepth));
         DirHeader.EstTableOffset  = ConvertBytesToInteger_4((LPBYTE)(&DirHeader.EstTableOffset));
         DirHeader.EstTableSize    = ConvertBytesToInteger_4((LPBYTE)(&DirHeader.EstTableSize));
 
@@ -220,7 +232,7 @@ struct TRootHandler_TVFS : public TFileTreeRoot
 
     LPBYTE CaptureVfsSpanCount(TVFS_DIRECTORY_HEADER & DirHeader, DWORD dwVfsOffset, DWORD & SpanCount)
     {
-        LPBYTE pbVfsFileTable = DirHeader.pbDirectoryData + DirHeader.VfsTableOffset;
+        LPBYTE pbVfsFileTable = DirHeader.DataAt(DirHeader.VfsTableOffset);
         LPBYTE pbVfsFileEntry = pbVfsFileTable + dwVfsOffset;
         LPBYTE pbVfsFileEnd = pbVfsFileTable + DirHeader.VfsTableSize;
 
@@ -239,7 +251,7 @@ struct TRootHandler_TVFS : public TFileTreeRoot
         LPBYTE pbCftFileTable;
         LPBYTE pbCftFileEntry;
         LPBYTE pbCftFileEnd;
-        LPBYTE pbVfsFileTable = DirHeader.pbDirectoryData + DirHeader.VfsTableOffset;
+        LPBYTE pbVfsFileTable = DirHeader.DataAt(DirHeader.VfsTableOffset);
         LPBYTE pbVfsFileEnd = pbVfsFileTable + DirHeader.VfsTableSize;
         size_t ItemSize = sizeof(DWORD) + sizeof(DWORD) + DirHeader.CftOffsSize;
 
@@ -260,7 +272,7 @@ struct TRootHandler_TVFS : public TFileTreeRoot
             //
 
             // Resolve the Container File Table entry
-            pbCftFileTable = DirHeader.pbDirectoryData + DirHeader.CftTableOffset;
+            pbCftFileTable = DirHeader.DataAt(DirHeader.CftTableOffset);
             pbCftFileEntry = pbCftFileTable + dwCftOffset;
             pbCftFileEnd = pbCftFileTable + DirHeader.CftTableSize;
 
@@ -300,8 +312,8 @@ struct TRootHandler_TVFS : public TFileTreeRoot
     LPBYTE CapturePathEntry(TVFS_PATH_TABLE_ENTRY & PathEntry, LPBYTE pbPathTablePtr, LPBYTE pbPathTableEnd)
     {
         // Reset the path entry structure
-        PathEntry.pbNamePtr = pbPathTablePtr;
-        PathEntry.pbNameEnd = pbPathTablePtr;
+        PathEntry.m_pNamePtr = (char *)(pbPathTablePtr);
+        PathEntry.m_pNameEnd = (char *)(pbPathTablePtr);
         PathEntry.NodeFlags = 0;
         PathEntry.NodeValue = 0;
 
@@ -320,8 +332,8 @@ struct TRootHandler_TVFS : public TFileTreeRoot
 
             if((pbPathTablePtr + nLength) > pbPathTableEnd)
                 return NULL;
-            PathEntry.pbNamePtr = pbPathTablePtr;
-            PathEntry.pbNameEnd = pbPathTablePtr + nLength;
+            PathEntry.m_pNamePtr = (char *)(pbPathTablePtr);
+            PathEntry.m_pNameEnd = (char *)(pbPathTablePtr + nLength);
             pbPathTablePtr += nLength;
         }
 
@@ -380,9 +392,11 @@ struct TRootHandler_TVFS : public TFileTreeRoot
     DWORD IsVfsSubDirectory(TCascStorage * hs,  TVFS_DIRECTORY_HEADER & DirHeader, TVFS_DIRECTORY_HEADER & SubHeader, LPBYTE EKey, DWORD dwFileSize)
     {
         PCASC_CKEY_ENTRY pCKeyEntry;
-        LPBYTE pbVfsData = NULL;
-        DWORD cbVfsData = dwFileSize;
+        CASC_BLOB VfsData;
         DWORD dwErrCode = ERROR_BAD_FORMAT;
+
+        // Keep compiler happy
+        CASCLIB_UNUSED(dwFileSize);
 
         // Verify whether the EKey is in the list of VFS root files
         if(IsVfsFileEKey(hs, EKey, DirHeader.EKeySize))
@@ -391,17 +405,16 @@ struct TRootHandler_TVFS : public TFileTreeRoot
             if((pCKeyEntry = FindCKeyEntry_EKey(hs, EKey)) != NULL)
             {
                 // Load the entire file into memory
-                pbVfsData = LoadInternalFileToMemory(hs, pCKeyEntry, &cbVfsData);
-                if(pbVfsData && cbVfsData)
+                dwErrCode = LoadInternalFileToMemory(hs, pCKeyEntry, VfsData);
+                if(dwErrCode == ERROR_SUCCESS && VfsData.cbData)
                 {
                     // Capture the file folder. This also serves as test
-                    dwErrCode = CaptureDirectoryHeader(SubHeader, pbVfsData, pbVfsData + cbVfsData);
+                    dwErrCode = CaptureDirectoryHeader(SubHeader, VfsData);
                     if(dwErrCode == ERROR_SUCCESS)
                         return dwErrCode;
 
                     // Clear the captured header
                     memset(&SubHeader, 0, sizeof(TVFS_DIRECTORY_HEADER));
-                    CASC_FREE(pbVfsData);
                 }
             }
         }
@@ -523,6 +536,11 @@ struct TRootHandler_TVFS : public TFileTreeRoot
                             }
                         }
 
+                        //BREAKIF(strcmp((const char *)PathBuffer, "Base") == 0);
+                        //BREAKIF(strcmp((const char *)PathBuffer, "base") == 0);
+                        //BREAKIF(strcmp((const char *)PathBuffer, "base:ComplexTypeDescriptorSizes.dat") == 0);
+                        //BREAKIF(strcmp((const char *)PathBuffer, "DivideAndConquer.w3m:war3map.doo") == 0);
+
                         // We need to check whether this is another TVFS directory file
                         if(IsVfsSubDirectory(hs, DirHeader, SubHeader, SpanEntry.EKey, SpanEntry.ContentSize) == ERROR_SUCCESS)
                         {
@@ -533,11 +551,8 @@ struct TRootHandler_TVFS : public TFileTreeRoot
                             assert(pCKeyEntry->ContentSize == SpanEntry.ContentSize);
                             FileTree.InsertByName(pCKeyEntry, PathBuffer);
 
-                            // Parse the subdir
+                            // Parse the subdir. On error, stop the parsing
                             dwErrCode = ParseDirectoryData(hs, SubHeader, PathBuffer);
-                            CASC_FREE(SubHeader.pbDirectoryData);
-
-                            // On error, stop the parsing
                             if(dwErrCode != ERROR_SUCCESS)
                                 return dwErrCode;
                         }
@@ -573,7 +588,7 @@ struct TRootHandler_TVFS : public TFileTreeRoot
                     {
                         PCASC_CKEY_ENTRY pSpanEntries;
                         PCASC_FILE_NODE pFileNode;
-                        USHORT RefCount;
+                        DWORD RefCount;
                         bool bFilePresent = true;
 
                         //
@@ -652,7 +667,7 @@ struct TRootHandler_TVFS : public TFileTreeRoot
 
     DWORD ParseDirectoryData(TCascStorage * hs, TVFS_DIRECTORY_HEADER & DirHeader, CASC_PATH<char> & PathBuffer)
     {
-        LPBYTE pbRootDirectory = DirHeader.pbDirectoryData + DirHeader.PathTableOffset;
+        LPBYTE pbRootDirectory = DirHeader.DataAt(DirHeader.PathTableOffset);
         LPBYTE pbRootDirPtr = pbRootDirectory;
         LPBYTE pbRootDirEnd = pbRootDirPtr + DirHeader.PathTableSize;
         DWORD dwNodeValue = 0;
@@ -697,7 +712,7 @@ struct TRootHandler_TVFS : public TFileTreeRoot
         FileTree.SetKeyLength(RootHeader.EKeySize);
 
         // Initialize the array of span entries
-        dwErrCode = SpanArray.Create(sizeof(CASC_CKEY_ENTRY), 0x100);
+        dwErrCode = SpanArray.Create(sizeof(CASC_CKEY_ENTRY), 0x10000);
         if(dwErrCode != ERROR_SUCCESS)
             return dwErrCode;
 
@@ -718,36 +733,45 @@ struct TRootHandler_TVFS : public TFileTreeRoot
     DWORD CheckWoWGenericName(const CASC_PATH<char> & PathBuffer, TVFS_WOW_ENTRY & WowEntry)
     {
         size_t nPathLength = PathBuffer.Length();
-        BYTE BinaryBuffer[4+2+4+16];
 
         //
         // WoW Build 45779: 000000020000:000C472F02BA924C604A670B253AA02DBCD9441  (Bug: Missing last digit of the CKey)
         // WoW Build 46144: 000000020000:000C472F02BA924C604A670B253AA02DBCD9441C
         //                  LLLLLLLLCCCC IIIIIIIIKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
+        // 
+        // WoW Build 63728: 0000000200000000:005096B78ECBF6630B7A282B01358857C6DDF2B2
+        //                  LLLLLLLLCCCCCCCC IIIIIIIIKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
         //
         //                  L = Locale flags, C = Content flags, I = File Data ID, K = CKey
         //
 
-        if(nPathLength == 52 || nPathLength == 53)
+        if(nPathLength == 52 || nPathLength == 53 || nPathLength == 57)
         {
-            if(PathBuffer[12] == ':')
+            const char * pColonPosition = strchr(PathBuffer, ':');
+            const char * szFileName = PathBuffer;
+            size_t nColonPos = pColonPosition - szFileName;
+            BYTE NamePart1[4 + 4];          // Content flags, locale flags
+            BYTE NamePart2[4 + 16];         // File data ID, CKey
+
+            // Is there colon (':') at position 12 or 16?
+            if(nColonPos == 12 || nColonPos == 16)
             {
-                // Check the first part of the TVFS name
-                if(BinaryFromString(&PathBuffer[00], 12, (LPBYTE)(&BinaryBuffer[0])) != ERROR_SUCCESS)
+                // Check the locale flags and content flags
+                if(BinaryFromString(szFileName, nColonPos, NamePart1) != ERROR_SUCCESS)
                     return ERROR_REPARSE_ROOT;
 
-                // Check the second part of the file name
-                if(BinaryFromString(&PathBuffer[13], 40, (LPBYTE)(&BinaryBuffer[6])) != ERROR_SUCCESS)
+                // Check the file data ID from the TVFS name
+                if(BinaryFromString(pColonPosition + 1, 40, NamePart2) != ERROR_SUCCESS)
                     return ERROR_REPARSE_ROOT;
 
 #ifdef TVFS_PARSE_WOW_ROOT
-                // We accept strings with length 53 chars
-                if(nPathLength == 53)
+                // We accept strings with length 53 or 57 chars
+                if(nPathLength == 53 || nPathLength == 57)
                 {
-                    WowEntry.LocaleFlags  = ConvertBytesToInteger_4(BinaryBuffer + 0x00);
-                    WowEntry.ContentFlags = ConvertBytesToInteger_2(BinaryBuffer + 0x04);
-                    WowEntry.FileDataId   = ConvertBytesToInteger_4(BinaryBuffer + 0x06);
-                    memcpy(WowEntry.ContentKey, BinaryBuffer + 0x0A, MD5_HASH_SIZE);
+                    WowEntry.LocaleFlags  = ConvertBytesToInteger_4(&NamePart1[0]);
+                    WowEntry.ContentFlags = ConvertBytesToInteger_X(&NamePart1[4], (nColonPos - 8) / 2);
+                    WowEntry.FileDataId   = ConvertBytesToInteger_4(&NamePart2[0]);
+                    memcpy(WowEntry.ContentKey, &NamePart2[4], MD5_HASH_SIZE);
                     return ERROR_SUCCESS;
                 }
 #endif  // TVFS_PARSE_WOW_ROOT
@@ -766,14 +790,14 @@ struct TRootHandler_TVFS : public TFileTreeRoot
 //-----------------------------------------------------------------------------
 // Public functions - TVFS root
 
-DWORD RootHandler_CreateTVFS(TCascStorage * hs, LPBYTE pbRootFile, DWORD cbRootFile)
+DWORD RootHandler_CreateTVFS(TCascStorage * hs, CASC_BLOB & RootFile)
 {
     TRootHandler_TVFS * pRootHandler = NULL;
     TVFS_DIRECTORY_HEADER RootHeader;
     DWORD dwErrCode;
 
     // Capture the entire root directory
-    dwErrCode = TRootHandler_TVFS::CaptureDirectoryHeader(RootHeader, pbRootFile, pbRootFile + cbRootFile);
+    dwErrCode = TRootHandler_TVFS::CaptureDirectoryHeader(RootHeader, RootFile);
     if(dwErrCode == ERROR_SUCCESS)
     {
         // Allocate the root handler object

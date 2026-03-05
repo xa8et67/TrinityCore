@@ -86,6 +86,17 @@ void Unit::UpdateDamagePhysical(WeaponAttackType attType)
     }
 }
 
+int32 Unit::GetCreatePowerValue(Powers power) const
+{
+    if (power == POWER_MANA)
+        return GetCreateMana();
+
+    if (PowerTypeEntry const* powerType = sDB2Manager.GetPowerTypeEntry(power))
+        return powerType->MaxBasePower;
+
+    return 0;
+}
+
 /*#######################################
 ########                         ########
 ########   PLAYERS STAT SYSTEM   ########
@@ -281,7 +292,7 @@ Stats Player::GetPrimaryStat() const
 {
     uint8 primaryStatPriority = [&]() -> uint8
     {
-        if (ChrSpecializationEntry const* specialization = sChrSpecializationStore.LookupEntry(GetPrimarySpecialization()))
+        if (ChrSpecializationEntry const* specialization = GetPrimarySpecializationEntry())
             return specialization->PrimaryStatPriority;
 
         return sChrClassesStore.AssertEntry(GetClass())->PrimaryStatPriority;
@@ -319,7 +330,7 @@ void Player::UpdateMaxPower(Powers power)
     if (powerIndex == MAX_POWERS || powerIndex >= MAX_POWERS_PER_CLASS)
         return;
 
-    UnitMods unitMod = UnitMods(UNIT_MOD_POWER_START + power);
+    UnitMods unitMod = UnitMods(UNIT_MOD_POWER_START + AsUnderlyingType(power));
 
     float value = GetFlatModifierValue(unitMod, BASE_VALUE) + GetCreatePowerValue(power);
     value *= GetPctModifierValue(unitMod, BASE_PCT);
@@ -535,27 +546,15 @@ void Player::UpdateMastery()
     value += GetRatingBonusValue(CR_MASTERY);
     SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::Mastery), value);
 
-    ChrSpecializationEntry const* chrSpec = sChrSpecializationStore.LookupEntry(GetPrimarySpecialization());
+    ChrSpecializationEntry const* chrSpec = GetPrimarySpecializationEntry();
     if (!chrSpec)
         return;
 
-    for (int32 masterySpellId : chrSpec->MasterySpellID)
-    {
-        if (Aura* aura = GetAura(masterySpellId))
-        {
+    for (auto const& [_, aura] : GetOwnedAuras())
+        if (aura->GetCasterGUID() == GetGUID() && aura->GetSpellInfo()->HasAttribute(SPELL_ATTR8_MASTERY_AFFECTS_POINTS))
             for (AuraEffect* auraEff : aura->GetAuraEffects())
-            {
-                if (!auraEff)
-                    continue;
-
-                float mult = auraEff->GetSpellEffectInfo().BonusCoefficient;
-                if (G3D::fuzzyEq(mult, 0.0f))
-                    continue;
-
-                auraEff->ChangeAmount(int32(value * mult));
-            }
-        }
-    }
+                if (G3D::fuzzyNe(auraEff->GetSpellEffectInfo().BonusCoefficient, 0.0f))
+                    auraEff->RecalculateAmount(this);
 }
 
 void Player::UpdateVersatilityDamageDone()
@@ -598,6 +597,7 @@ float const m_diminishing_k[MAX_CLASSES] =
     0.9830f,  // Demon Hunter
     0.9880f,  // Evoker
     1.0f,     // Adventurer
+    1.0f,     // Traveler
 };
 
 // helper function
@@ -623,7 +623,7 @@ float CalculateDiminishingReturns(float const (&capArray)[MAX_CLASSES], uint8 pl
     return result;
 }
 
-float const parry_cap[MAX_CLASSES] =
+constexpr float parry_cap[MAX_CLASSES] =
 {
     65.631440f,     // Warrior
     65.631440f,     // Paladin
@@ -639,6 +639,7 @@ float const parry_cap[MAX_CLASSES] =
     65.631440f,     // Demon Hunter
     0.0f,           // Evoker
     0.0f,           // Adventurer
+    0.0f,           // Traveler
 };
 
 void Player::UpdateParryPercentage()
@@ -664,7 +665,7 @@ void Player::UpdateParryPercentage()
     SetUpdateFieldStatValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ParryPercentage), value);
 }
 
-float const dodge_cap[MAX_CLASSES] =
+constexpr float dodge_cap[MAX_CLASSES] =
 {
     65.631440f,     // Warrior
     65.631440f,     // Paladin
@@ -680,6 +681,7 @@ float const dodge_cap[MAX_CLASSES] =
     145.560408f,    // Demon Hunter
     145.560408f,    // Evoker
     0.0f,           // Adventurer
+    0.0f,           // Traveler
 };
 
 void Player::UpdateDodgePercentage()
@@ -728,13 +730,10 @@ void Player::UpdateCorruption()
             continue;
         }
 
-        if (PlayerConditionEntry const* playerCondition = sPlayerConditionStore.LookupEntry(corruptionEffect->PlayerConditionID))
+        if (!ConditionMgr::IsPlayerMeetingCondition(this, corruptionEffect->PlayerConditionID))
         {
-            if (!ConditionMgr::IsPlayerMeetingCondition(this, playerCondition))
-            {
-                RemoveAura(corruptionEffect->Aura);
-                continue;
-            }
+            RemoveAura(corruptionEffect->Aura);
+            continue;
         }
 
         CastSpell(this, corruptionEffect->Aura, true);
@@ -874,6 +873,15 @@ void Player::_RemoveAllStatBonuses()
 ########                         ########
 #######################################*/
 
+int32 Creature::GetCreatePowerValue(Powers power) const
+{
+    if (PowerTypeEntry const* powerType = sDB2Manager.GetPowerTypeEntry(power))
+        if (!powerType->GetFlags().HasFlag(PowerTypeFlags::IsUsedByNPCs))
+            return 0;
+
+    return Unit::GetCreatePowerValue(power);
+}
+
 bool Creature::UpdateStats(Stats /*stat*/)
 {
     return true;
@@ -910,10 +918,21 @@ uint32 Creature::GetPowerIndex(Powers power) const
 {
     if (power == GetPowerType())
         return 0;
-    if (power == POWER_ALTERNATE_POWER)
-        return 1;
-    if (power == POWER_COMBO_POINTS)
-        return 2;
+    switch (power)
+    {
+        case POWER_COMBO_POINTS:
+            return 2;
+        case POWER_ALTERNATE_POWER:
+            return 1;
+        case POWER_ALTERNATE_QUEST:
+            return 3;
+        case POWER_ALTERNATE_ENCOUNTER:
+            return 4;
+        case POWER_ALTERNATE_MOUNT:
+            return 5;
+        default:
+            break;
+    }
     return MAX_POWERS;
 }
 
@@ -922,7 +941,7 @@ void Creature::UpdateMaxPower(Powers power)
     if (GetPowerIndex(power) == MAX_POWERS)
         return;
 
-    UnitMods unitMod = UnitMods(UNIT_MOD_POWER_START + power);
+    UnitMods unitMod = UnitMods(UNIT_MOD_POWER_START + AsUnderlyingType(power));
 
     float value = GetFlatModifierValue(unitMod, BASE_VALUE) + GetCreatePowerValue(power);
     value *= GetPctModifierValue(unitMod, BASE_PCT);
@@ -1003,7 +1022,7 @@ void Creature::CalculateMinMaxDamage(WeaponAttackType attType, bool normalized, 
     float basePct          = GetPctModifierValue(unitMod, BASE_PCT) * attackSpeedMulti;
     float totalValue       = GetFlatModifierValue(unitMod, TOTAL_VALUE);
     float totalPct         = addTotalPct ? GetPctModifierValue(unitMod, TOTAL_PCT) : 1.0f;
-    float dmgMultiplier    = GetCreatureTemplate()->ModDamage; // = ModDamage * _GetDamageMod(rank);
+    float dmgMultiplier    = GetCreatureDifficulty()->DamageModifier; // = DamageModifier * GetDamageMod(rank);
 
     minDamage = ((weaponMinDamage + baseValue) * dmgMultiplier * basePct + totalValue) * totalPct;
     maxDamage = ((weaponMaxDamage + baseValue) * dmgMultiplier * basePct + totalValue) * totalPct;
@@ -1173,7 +1192,7 @@ void Guardian::UpdateMaxPower(Powers power)
     if (GetPowerIndex(power) == MAX_POWERS)
         return;
 
-    UnitMods unitMod = UnitMods(UNIT_MOD_POWER_START + power);
+    UnitMods unitMod = UnitMods(UNIT_MOD_POWER_START + AsUnderlyingType(power));
 
     float value = GetFlatModifierValue(unitMod, BASE_VALUE) + GetCreatePowerValue(power);
     value *= GetPctModifierValue(unitMod, BASE_PCT);

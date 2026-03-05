@@ -153,7 +153,7 @@ class boss_selin_fireheart : public CreatureScript
                     Unit* CrystalChosen = ObjectAccessor::GetUnit(*me, CrystalGUID);
                     if (CrystalChosen && CrystalChosen->IsAlive())
                     {
-                        CrystalChosen->RemoveUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
+                        CrystalChosen->SetUninteractible(false);
                         CrystalChosen->CastSpell(me, SPELL_MANA_RAGE, true);
                         events.ScheduleEvent(EVENT_EMPOWER, 10s, PHASE_DRAIN);
                     }
@@ -239,8 +239,6 @@ class boss_selin_fireheart : public CreatureScript
                             events.ScheduleEvent(EVENT_DRAIN_CRYSTAL, 20s, 25s, 0, PHASE_NORMAL);
                     }
                 }
-
-                DoMeleeAttackIfReady();
             }
 
         private:
@@ -251,7 +249,7 @@ class boss_selin_fireheart : public CreatureScript
         CreatureAI* GetAI(Creature* creature) const override
         {
             return GetMagistersTerraceAI<boss_selin_fireheartAI>(creature);
-        };
+        }
 };
 
 class npc_fel_crystal : public CreatureScript
@@ -277,7 +275,7 @@ class npc_fel_crystal : public CreatureScript
         CreatureAI* GetAI(Creature* creature) const override
         {
             return GetMagistersTerraceAI<npc_fel_crystalAI>(creature);
-        };
+        }
 };
 
 void AddSC_boss_selin_fireheart()

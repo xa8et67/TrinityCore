@@ -22,30 +22,27 @@
 #include "Map.h"
 #include "ScriptedCreature.h"
 
-DoorData const doorData[] =
+static constexpr DoorData doorData[] =
 {
-    { GO_PRISON_DOOR_01, DATA_KELIDAN_THE_BREAKER, DOOR_TYPE_PASSAGE },
-    { GO_PRISON_DOOR_02, DATA_THE_MAKER,           DOOR_TYPE_ROOM },
-    { GO_PRISON_DOOR_03, DATA_THE_MAKER,           DOOR_TYPE_PASSAGE },
-    { GO_PRISON_DOOR_04, DATA_BROGGOK,             DOOR_TYPE_PASSAGE },
-    { GO_PRISON_DOOR_05, DATA_BROGGOK,             DOOR_TYPE_ROOM },
-    { GO_SUMMON_DOOR,    DATA_KELIDAN_THE_BREAKER, DOOR_TYPE_PASSAGE },
-    { 0,                 0,                        DOOR_TYPE_ROOM } // END
+    { GO_PRISON_DOOR_01, DATA_KELIDAN_THE_BREAKER, EncounterDoorBehavior::OpenWhenDone },
+    { GO_PRISON_DOOR_02, DATA_THE_MAKER,           EncounterDoorBehavior::OpenWhenNotInProgress },
+    { GO_PRISON_DOOR_03, DATA_THE_MAKER,           EncounterDoorBehavior::OpenWhenDone },
+    { GO_PRISON_DOOR_04, DATA_BROGGOK,             EncounterDoorBehavior::OpenWhenDone },
+    { GO_PRISON_DOOR_05, DATA_BROGGOK,             EncounterDoorBehavior::OpenWhenNotInProgress },
+    { GO_SUMMON_DOOR,    DATA_KELIDAN_THE_BREAKER, EncounterDoorBehavior::OpenWhenDone },
 };
 
-ObjectData const creatureData[] =
+static constexpr ObjectData creatureData[] =
 {
     { NPC_BROGGOK,             DATA_BROGGOK             },
-    { 0,                       0                        } // END
 };
 
-ObjectData const gameObjectData[] =
+static constexpr ObjectData gameObjectData[] =
 {
     { GO_BROGGOK_LEVER,      DATA_BROGGOK_LEVER },
-    { 0,                     0                  } //END
 };
 
-DungeonEncounterData const encounters[] =
+static constexpr DungeonEncounterData encounters[] =
 {
     { DATA_THE_MAKER, {{ 1922 }} },
     { DATA_BROGGOK, {{ 1924 }} },

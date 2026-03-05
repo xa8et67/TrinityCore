@@ -116,12 +116,12 @@ public:
                         ++mBarrelCount;
                         DoUpdateWorldState(WORLD_STATE_OH, mBarrelCount);
 
-                        TC_LOG_DEBUG("scripts", "Instance Old Hillsbrad: go_barrel_old_hillsbrad count %u", mBarrelCount);
+                        TC_LOG_DEBUG("scripts", "Instance Old Hillsbrad: go_barrel_old_hillsbrad count {}", mBarrelCount);
 
                         if (mBarrelCount == 5)
                         {
                             UpdateQuestCredit();
-                            if (TempSummon* drake = instance->SummonCreature(DRAKE_ENTRY, { 2128.43f, 71.01f, 64.42f, 1.74f }, nullptr, Milliseconds(30min).count()))
+                            if (TempSummon* drake = instance->SummonCreature(DRAKE_ENTRY, { 2128.43f, 71.01f, 64.42f, 1.74f }, nullptr, 30min))
                                 drake->SetTempSummonType(TEMPSUMMON_DEAD_DESPAWN);
                         }
                     }
@@ -143,7 +143,7 @@ public:
                         else
                             ThrallEscortState = OH_ESCORT_PRISON_TO_SKARLOC; // not correct, see npc_thrall_old_hillsbrad::InitializeAI for details
                     }
-                    TC_LOG_DEBUG("scripts", "Instance Old Hillsbrad: Thrall escort event adjusted to data %u.", data);
+                    TC_LOG_DEBUG("scripts", "Instance Old Hillsbrad: Thrall escort event adjusted to data {}.", data);
                     break;
                 }
             }

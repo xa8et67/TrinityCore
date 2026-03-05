@@ -83,6 +83,11 @@ Group* GroupMgr::GetGroupByDbStoreId(uint32 storageId) const
     return nullptr;
 }
 
+void GroupMgr::SetGroupDbStoreSize(uint32 newSize)
+{
+    GroupDbStore.resize(newSize);
+}
+
 ObjectGuid::LowType GroupMgr::GenerateGroupId()
 {
     if (NextGroupId >= 0xFFFFFFFE)
@@ -140,8 +145,8 @@ void GroupMgr::LoadGroups()
 
         //                                                        0              1           2             3                 4      5          6      7         8       9
         QueryResult result = CharacterDatabase.Query("SELECT g.leaderGuid, g.lootMethod, g.looterGuid, g.lootThreshold, g.icon1, g.icon2, g.icon3, g.icon4, g.icon5, g.icon6"
-            //  10         11          12         13              14                  15                     16             17          18         19
-            ", g.icon7, g.icon8, g.groupType, g.difficulty, g.raiddifficulty, g.legacyRaidDifficulty, g.masterLooterGuid, g.guid, lfg.dungeon, lfg.state FROM `groups` g LEFT JOIN lfg_data lfg ON lfg.guid = g.guid ORDER BY g.guid ASC");
+            //  10         11          12         13              14                  15                     16             17           18                19         20
+            ", g.icon7, g.icon8, g.groupType, g.difficulty, g.raiddifficulty, g.legacyRaidDifficulty, g.masterLooterGuid, g.guid, g.pingRestriction, lfg.dungeon, lfg.state FROM `groups` g LEFT JOIN lfg_data lfg ON lfg.guid = g.guid ORDER BY g.guid ASC");
         if (!result)
         {
             TC_LOG_INFO("server.loading", ">> Loaded 0 group definitions. DB table `groups` is empty!");
@@ -169,7 +174,7 @@ void GroupMgr::LoadGroups()
         }
         while (result->NextRow());
 
-        TC_LOG_INFO("server.loading", ">> Loaded %u group definitions in %u ms", count, GetMSTimeDiffToNow(oldMSTime));
+        TC_LOG_INFO("server.loading", ">> Loaded {} group definitions in {} ms", count, GetMSTimeDiffToNow(oldMSTime));
     }
 
     TC_LOG_INFO("server.loading", "Loading Group members...");
@@ -194,12 +199,12 @@ void GroupMgr::LoadGroups()
             if (group)
                 group->LoadMemberFromDB(fields[1].GetUInt64(), fields[2].GetUInt8(), fields[3].GetUInt8(), fields[4].GetUInt8());
             else
-                TC_LOG_ERROR("misc", "GroupMgr::LoadGroups: Consistency failed, can't find group (storage id: %u)", fields[0].GetUInt32());
+                TC_LOG_ERROR("misc", "GroupMgr::LoadGroups: Consistency failed, can't find group (storage id: {})", fields[0].GetUInt32());
 
             ++count;
         }
         while (result->NextRow());
 
-        TC_LOG_INFO("server.loading", ">> Loaded %u group members in %u ms", count, GetMSTimeDiffToNow(oldMSTime));
+        TC_LOG_INFO("server.loading", ">> Loaded {} group members in {} ms", count, GetMSTimeDiffToNow(oldMSTime));
     }
 }

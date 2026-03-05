@@ -309,8 +309,6 @@ public:
                 if (me->IsWithinMeleeRange(me->GetVictim()))
                 {
                     HandleTouchedSpells(me->GetVictim(), SPELL_DARK_TOUCHED);
-                    me->AttackerStateUpdate(me->GetVictim());
-                    me->resetAttackTimer();
                 }
             }
         }
@@ -319,7 +317,7 @@ public:
     CreatureAI* GetAI(Creature* creature) const override
     {
         return GetSunwellPlateauAI<boss_sacrolashAI>(creature);
-    };
+    }
 };
 
 class boss_alythess : public CreatureScript
@@ -643,7 +641,7 @@ public:
     CreatureAI* GetAI(Creature* creature) const override
     {
         return GetSunwellPlateauAI<boss_alythessAI>(creature);
-    };
+    }
 };
 
 class npc_shadow_image : public CreatureScript
@@ -654,7 +652,7 @@ public:
     CreatureAI* GetAI(Creature* creature) const override
     {
         return GetSunwellPlateauAI<npc_shadow_imageAI>(creature);
-    };
+    }
 
     struct npc_shadow_imageAI : public ScriptedAI
     {

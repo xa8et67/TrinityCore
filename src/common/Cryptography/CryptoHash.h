@@ -24,6 +24,7 @@
 #include <array>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <openssl/evp.h>
 
 class BigNumber;
@@ -53,8 +54,8 @@ namespace Trinity::Impl
                 return hash.GetDigest();
             }
 
-            template <typename... Ts>
-            static auto GetDigestOf(Ts&&... pack) -> std::enable_if_t<std::conjunction_v<std::negation<std::is_integral<Ts>>...>, Digest>
+            template <typename... Ts, std::enable_if_t<std::conjunction_v<std::negation<std::is_integral<Ts>>...>, int32> = 0>
+            static Digest GetDigestOf(Ts&&... pack)
             {
                 GenericHash hash;
                 (hash.UpdateData(std::forward<Ts>(pack)), ...);
@@ -139,6 +140,7 @@ namespace Trinity::Crypto
     using MD5 = Trinity::Impl::GenericHash<EVP_md5, Constants::MD5_DIGEST_LENGTH_BYTES>;
     using SHA1 = Trinity::Impl::GenericHash<EVP_sha1, Constants::SHA1_DIGEST_LENGTH_BYTES>;
     using SHA256 = Trinity::Impl::GenericHash<EVP_sha256, Constants::SHA256_DIGEST_LENGTH_BYTES>;
+    using SHA512 = Trinity::Impl::GenericHash<EVP_sha512, Constants::SHA512_DIGEST_LENGTH_BYTES>;
 }
 
 #endif

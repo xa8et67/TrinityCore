@@ -17,6 +17,7 @@
 
 #include "ScriptMgr.h"
 #include "CellImpl.h"
+#include "Containers.h"
 #include "GridNotifiersImpl.h"
 #include "Log.h"
 #include "MotionMaster.h"
@@ -137,11 +138,8 @@ public:
                 me->AddAura(SPELL_JULES_GOES_PRONE, me);
                 me->AddAura(SPELL_JULES_THREATENS_AURA, me);
 
-                me->SetCanFly(true);
-                me->SetSpeedRate(MOVE_RUN, 0.2f);
-
                 me->SetFacingTo(3.207566f);
-                me->GetMotionMaster()->MoveJump(exorcismPos[2], 2.0f, 2.0f);
+                me->GetMotionMaster()->MovePoint(11, exorcismPos[2], false, {}, 1.25f);
 
                 success = false;
 
@@ -609,8 +607,6 @@ public:
 
             if (!UpdateVictim())
                 return;
-
-            DoMeleeAttackIfReady();
         }
 
         bool OnGossipSelect(Player* player, uint32 /*menuId*/, uint32 /*gossipListId*/) override
@@ -692,8 +688,6 @@ struct npc_watch_commander_leonus : public ScriptedAI
 
         if (!UpdateVictim())
             return;
-
-        DoMeleeAttackIfReady();
     }
 
 private:
@@ -808,8 +802,6 @@ enum FelSpirits
 // 39190 - Send Vengeance
 class spell_hellfire_peninsula_send_vengeance : public SpellScript
 {
-    PrepareSpellScript(spell_hellfire_peninsula_send_vengeance);
-
     bool Validate(SpellInfo const* /*spellInfo*/) override
     {
         return ValidateSpellInfo({ SPELL_SEND_VENGEANCE_TO_PLAYER });
@@ -831,8 +823,6 @@ class spell_hellfire_peninsula_send_vengeance : public SpellScript
 // 39202 - Send Vengeance to Player
 class spell_hellfire_peninsula_send_vengeance_to_player : public SpellScript
 {
-    PrepareSpellScript(spell_hellfire_peninsula_send_vengeance_to_player);
-
     bool Validate(SpellInfo const* /*spellInfo*/) override
     {
         return ValidateSpellInfo({ SPELL_SUMMON_FEL_SPIRIT });

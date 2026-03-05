@@ -16,14 +16,12 @@
  */
 
 #include "TransportMgr.h"
-#include "Containers.h"
-#include "DatabaseEnv.h"
 #include "DB2Stores.h"
+#include "DatabaseEnv.h"
 #include "InstanceScript.h"
 #include "Log.h"
 #include "Map.h"
-#include "MoveSplineInitArgs.h"
-#include "ObjectAccessor.h"
+#include "MapUtils.h"
 #include "ObjectMgr.h"
 #include "PhasingHandler.h"
 #include "Spline.h"
@@ -174,8 +172,12 @@ double TransportTemplate::CalculateDistanceMoved(double timePassedInSegment, dou
     }
 }
 
-TransportMgr::TransportMgr() = default;
+TransportAnimation::TransportAnimation() = default;
+TransportAnimation::~TransportAnimation() = default;
+TransportAnimation::TransportAnimation(TransportAnimation&&) noexcept = default;
+TransportAnimation& TransportAnimation::operator=(TransportAnimation&&) noexcept = default;
 
+TransportMgr::TransportMgr() = default;
 TransportMgr::~TransportMgr() = default;
 
 TransportMgr* TransportMgr::instance()
@@ -210,13 +212,13 @@ void TransportMgr::LoadTransportTemplates()
         GameObjectTemplate const* goInfo = sObjectMgr->GetGameObjectTemplate(entry);
         if (goInfo == nullptr)
         {
-            TC_LOG_ERROR("sql.sql", "Transport %u has no associated GameObjectTemplate from `gameobject_template` , skipped.", entry);
+            TC_LOG_ERROR("sql.sql", "Transport {} has no associated GameObjectTemplate from `gameobject_template` , skipped.", entry);
             continue;
         }
 
         if (goInfo->moTransport.taxiPathID >= sTaxiPathNodesByPath.size())
         {
-            TC_LOG_ERROR("sql.sql", "Transport %u (name: %s) has an invalid path specified in `gameobject_template`.`Data0` (%u) field, skipped.", entry, goInfo->name.c_str(), goInfo->moTransport.taxiPathID);
+            TC_LOG_ERROR("sql.sql", "Transport {} (name: {}) has an invalid path specified in `gameobject_template`.`Data0` ({}) field, skipped.", entry, goInfo->name, goInfo->moTransport.taxiPathID);
             continue;
         }
 
@@ -231,7 +233,7 @@ void TransportMgr::LoadTransportTemplates()
         ++count;
     } while (result->NextRow());
 
-    TC_LOG_INFO("server.loading", ">> Loaded %u transport templates in %u ms", count, GetMSTimeDiffToNow(oldMSTime));
+    TC_LOG_INFO("server.loading", ">> Loaded {} transport templates in {} ms", count, GetMSTimeDiffToNow(oldMSTime));
 }
 
 void TransportMgr::LoadTransportAnimationAndRotation()
@@ -267,26 +269,26 @@ void TransportMgr::LoadTransportSpawns()
             TransportTemplate const* transportTemplate = GetTransportTemplate(entry);
             if (!transportTemplate)
             {
-                TC_LOG_ERROR("sql.sql", "Table `transports` have transport (GUID: " UI64FMTD " Entry: %u) with unknown gameobject `entry` set, skipped.", guid, entry);
+                TC_LOG_ERROR("sql.sql", "Table `transports` have transport (GUID: {} Entry: {}) with unknown gameobject `entry` set, skipped.", guid, entry);
                 continue;
             }
 
             if (phaseUseFlags & ~PHASE_USE_FLAGS_ALL)
             {
-                TC_LOG_ERROR("sql.sql", "Table `transports` have transport (GUID: " UI64FMTD " Entry: %u) with unknown `phaseUseFlags` set, removed unknown value.", guid, entry);
+                TC_LOG_ERROR("sql.sql", "Table `transports` have transport (GUID: {} Entry: {}) with unknown `phaseUseFlags` set, removed unknown value.", guid, entry);
                 phaseUseFlags &= PHASE_USE_FLAGS_ALL;
             }
 
             if (phaseUseFlags & PHASE_USE_FLAGS_ALWAYS_VISIBLE && phaseUseFlags & PHASE_USE_FLAGS_INVERSE)
             {
-                TC_LOG_ERROR("sql.sql", "Table `transports` have transport (GUID: " UI64FMTD " Entry: %u) has both `phaseUseFlags` PHASE_USE_FLAGS_ALWAYS_VISIBLE and PHASE_USE_FLAGS_INVERSE,"
+                TC_LOG_ERROR("sql.sql", "Table `transports` have transport (GUID: {} Entry: {}) has both `phaseUseFlags` PHASE_USE_FLAGS_ALWAYS_VISIBLE and PHASE_USE_FLAGS_INVERSE,"
                     " removing PHASE_USE_FLAGS_INVERSE.", guid, entry);
                 phaseUseFlags &= ~PHASE_USE_FLAGS_INVERSE;
             }
 
             if (phaseGroupId && phaseId)
             {
-                TC_LOG_ERROR("sql.sql", "Table `transports` have transport (GUID: " UI64FMTD " Entry: %u) with both `phaseid` and `phasegroup` set, `phasegroup` set to 0", guid, entry);
+                TC_LOG_ERROR("sql.sql", "Table `transports` have transport (GUID: {} Entry: {}) with both `phaseid` and `phasegroup` set, `phasegroup` set to 0", guid, entry);
                 phaseGroupId = 0;
             }
 
@@ -294,7 +296,7 @@ void TransportMgr::LoadTransportSpawns()
             {
                 if (!sPhaseStore.LookupEntry(phaseId))
                 {
-                    TC_LOG_ERROR("sql.sql", "Table `transports` have transport (GUID: " UI64FMTD " Entry: %u) with `phaseid` %u does not exist, set to 0", guid, entry, phaseId);
+                    TC_LOG_ERROR("sql.sql", "Table `transports` have transport (GUID: {} Entry: {}) with `phaseid` {} does not exist, set to 0", guid, entry, phaseId);
                     phaseId = 0;
                 }
             }
@@ -303,7 +305,7 @@ void TransportMgr::LoadTransportSpawns()
             {
                 if (!sDB2Manager.GetPhasesForGroup(phaseGroupId))
                 {
-                    TC_LOG_ERROR("sql.sql", "Table `transports` have transport (GUID: " UI64FMTD " Entry: %u) with `phaseGroup` %u does not exist, set to 0", guid, entry, phaseGroupId);
+                    TC_LOG_ERROR("sql.sql", "Table `transports` have transport (GUID: {} Entry: {}) with `phaseGroup` {} does not exist, set to 0", guid, entry, phaseGroupId);
                     phaseGroupId = 0;
                 }
             }
@@ -321,35 +323,33 @@ void TransportMgr::LoadTransportSpawns()
         } while (result->NextRow());
     }
 
-    TC_LOG_INFO("server.loading", ">> Spawned %u continent transports in %u ms", count, GetMSTimeDiffToNow(oldMSTime));
+    TC_LOG_INFO("server.loading", ">> Spawned {} continent transports in {} ms", count, GetMSTimeDiffToNow(oldMSTime));
 }
 
 class SplineRawInitializer
 {
 public:
-    SplineRawInitializer(Movement::PointsArray& points) : _points(points) { }
+    SplineRawInitializer(std::vector<TaxiPathNodeEntry const*> const& points) : _points(points) { }
 
-    void operator()(uint8& mode, bool& cyclic, Movement::PointsArray& points, int& lo, int& hi) const
+    void operator()(uint8& mode, bool& cyclic, std::vector<Movement::Vector3>& points, int& lo, int& hi) const
     {
         mode = Movement::SplineBase::ModeCatmullrom;
         cyclic = false;
-        points.assign(_points.begin(), _points.end());
+        points.resize(_points.size());
+        std::ranges::transform(_points, points.begin(), [](TaxiPathNodeEntry const* node) { return Movement::Vector3(node->Loc.X, node->Loc.Y, node->Loc.Z); });
         lo = 1;
         hi = points.size() - 2;
     }
 
-    Movement::PointsArray& _points;
+    std::vector<TaxiPathNodeEntry const*> const& _points;
 };
 
 static void InitializeLeg(TransportPathLeg* leg, std::vector<TransportPathEvent>* outEvents, std::vector<TaxiPathNodeEntry const*> const& pathPoints, std::vector<TaxiPathNodeEntry const*> const& pauses,
     std::vector<TaxiPathNodeEntry const*> const& events, GameObjectTemplate const* goInfo, uint32& totalTime)
 {
-    Movement::PointsArray splinePath;
-    std::transform(pathPoints.begin(), pathPoints.end(), std::back_inserter(splinePath), [](TaxiPathNodeEntry const* node) { return Movement::Vector3(node->Loc.X, node->Loc.Y, node->Loc.Z); });
-    SplineRawInitializer initer(splinePath);
     leg->Spline = std::make_unique<TransportSpline>();
     leg->Spline->set_steps_per_segment(20);
-    leg->Spline->init_spline_custom(initer);
+    leg->Spline->init_spline_custom(SplineRawInitializer(pathPoints));
     leg->Spline->initLengths();
 
     leg->Segments.resize(pauses.size() + 1);
@@ -406,14 +406,14 @@ static void InitializeLeg(TransportPathLeg* leg, std::vector<TransportPathEvent>
                 if ((*eventPointItr)->ArrivalEventID)
                 {
                     TransportPathEvent& event = outEvents->emplace_back();
-                    event.Timestamp = totalTime + splineTime + leg->Duration;
+                    event.Timestamp = totalTime + splineTime + leg->Duration + delaySum;
                     event.EventId = (*eventPointItr)->ArrivalEventID;
                 }
 
                 if ((*eventPointItr)->DepartureEventID)
                 {
                     TransportPathEvent& event = outEvents->emplace_back();
-                    event.Timestamp = totalTime + splineTime + leg->Duration + (pausePointItr == eventPointItr ? (*eventPointItr)->Delay * IN_MILLISECONDS : 0);
+                    event.Timestamp = totalTime + splineTime + leg->Duration + delaySum + (pausePointItr == eventPointItr ? (*eventPointItr)->Delay * IN_MILLISECONDS : 0);
                     event.EventId = (*eventPointItr)->DepartureEventID;
                 }
             }
@@ -452,14 +452,14 @@ static void InitializeLeg(TransportPathLeg* leg, std::vector<TransportPathEvent>
         if ((*eventPointItr)->ArrivalEventID)
         {
             TransportPathEvent& event = outEvents->emplace_back();
-            event.Timestamp = totalTime + splineTime + leg->Duration;
+            event.Timestamp = totalTime + splineTime + leg->Duration + delaySum;
             event.EventId = (*eventPointItr)->ArrivalEventID;
         }
 
         if ((*eventPointItr)->DepartureEventID)
         {
             TransportPathEvent& event = outEvents->emplace_back();
-            event.Timestamp = totalTime + splineTime + leg->Duration;
+            event.Timestamp = totalTime + splineTime + leg->Duration + delaySum;
             event.EventId = (*eventPointItr)->DepartureEventID;
         }
     }
@@ -507,6 +507,9 @@ void TransportMgr::GeneratePath(GameObjectTemplate const* goInfo, TransportTempl
     {
         if (node->ContinentID != leg->MapId || prevNodeWasTeleport)
         {
+            if (prevNodeWasTeleport && !pathPoints.empty())
+                pathPoints.push_back(pathPoints.back());
+
             InitializeLeg(leg, &transport->Events, pathPoints, pauses, events, goInfo, totalTime);
 
             leg = &transport->PathLegs.emplace_back();
@@ -517,13 +520,13 @@ void TransportMgr::GeneratePath(GameObjectTemplate const* goInfo, TransportTempl
         }
 
         prevNodeWasTeleport = (node->Flags & TAXI_PATH_NODE_FLAG_TELEPORT) != 0;
-        pathPoints.push_back(node);
-        if (node->Flags & TAXI_PATH_NODE_FLAG_STOP)
+        if (!pathPoints.empty() && node->Flags & TAXI_PATH_NODE_FLAG_STOP)
             pauses.push_back(node);
 
         if (node->ArrivalEventID || node->DepartureEventID)
             events.push_back(node);
 
+        pathPoints.push_back(node);
         transport->MapIds.insert(node->ContinentID);
     }
 
@@ -568,20 +571,20 @@ Transport* TransportMgr::CreateTransport(uint32 entry, Map* map, ObjectGuid::Low
     TransportTemplate const* tInfo = GetTransportTemplate(entry);
     if (!tInfo)
     {
-        TC_LOG_ERROR("sql.sql", "Transport %u will not be loaded, `transport_template` missing", entry);
+        TC_LOG_ERROR("sql.sql", "Transport {} will not be loaded, `transport_template` missing", entry);
         return nullptr;
     }
 
     if (tInfo->MapIds.find(map->GetId()) == tInfo->MapIds.end())
     {
-        TC_LOG_ERROR("entities.transport", "Transport %u attempted creation on map it has no path for %u!", entry, map->GetId());
+        TC_LOG_ERROR("entities.transport", "Transport {} attempted creation on map it has no path for {}!", entry, map->GetId());
         return nullptr;
     }
 
     Optional<Position> startingPosition = tInfo->ComputePosition(0, nullptr, nullptr);
     if (!startingPosition)
     {
-        TC_LOG_ERROR("sql.sql", "Transport %u will not be loaded, failed to compute starting position", entry);
+        TC_LOG_ERROR("sql.sql", "Transport {} will not be loaded, failed to compute starting position", entry);
         return nullptr;
     }
 

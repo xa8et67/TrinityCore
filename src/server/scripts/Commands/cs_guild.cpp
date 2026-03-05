@@ -33,6 +33,7 @@ EndScriptData */
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "RBAC.h"
+#include "Util.h"
 #include <iomanip>
 
 #if TRINITY_COMPILER == TRINITY_COMPILER_GNU
@@ -56,6 +57,7 @@ public:
             { "rank",     rbac::RBAC_PERM_COMMAND_GUILD_RANK,     true, &HandleGuildRankCommand,             "" },
             { "rename",   rbac::RBAC_PERM_COMMAND_GUILD_RENAME,   true, &HandleGuildRenameCommand,           "" },
             { "info",     rbac::RBAC_PERM_COMMAND_GUILD_INFO,     true, &HandleGuildInfoCommand,             "" },
+            { "list",     rbac::RBAC_PERM_COMMAND_GUILD_INFO,     true, &HandleGuildListCommand,             "" },
         };
         static std::vector<ChatCommand> commandTable =
         {
@@ -143,8 +145,6 @@ public:
             return false;
 
         targetGuild->Disband();
-        delete targetGuild;
-
         return true;
     }
 
@@ -192,7 +192,7 @@ public:
             return false;
 
         CharacterDatabaseTransaction trans(nullptr);
-        targetGuild->DeleteMember(trans, targetGuid, false, true, true);
+        targetGuild->DeleteMember(trans, targetGuid, false, true);
         return true;
     }
 
@@ -263,19 +263,19 @@ public:
         return true;
     }
 
-    static bool HandleGuildInfoCommand(ChatHandler* handler, char const* args)
+    static bool HandleGuildInfoCommand(ChatHandler* handler, Optional<Variant<ObjectGuid::LowType, std::string_view>> const& guildIdentifier)
     {
         Guild* guild = nullptr;
 
-        if (args && args[0] != '\0')
+        if (guildIdentifier)
         {
-            if (isNumeric(args))
-                guild = sGuildMgr->GetGuildById(strtoull(args, nullptr, 10));
+            if (ObjectGuid::LowType const* guid = std::get_if<ObjectGuid::LowType>(&*guildIdentifier))
+                guild = sGuildMgr->GetGuildById(*guid);
             else
-                guild = sGuildMgr->GetGuildByName(args);
+                guild = sGuildMgr->GetGuildByName(guildIdentifier->get<std::string_view>());
         }
-        else if (Player* target = handler->getSelectedPlayerOrSelf())
-            guild = target->GetGuild();
+        else if (Optional<PlayerIdentifier> target = PlayerIdentifier::FromTargetOrSelf(handler); target && target->IsConnected())
+            guild = target->GetConnectedPlayer()->GetGuild();
 
         if (!guild)
             return false;
@@ -299,6 +299,37 @@ public:
         handler->PSendSysMessage(LANG_GUILD_INFO_LEVEL, guild->GetLevel()); // Level
         handler->PSendSysMessage(LANG_GUILD_INFO_MOTD, guild->GetMOTD().c_str()); // Message of the Day
         handler->PSendSysMessage(LANG_GUILD_INFO_EXTRA_INFO, guild->GetInfo().c_str()); // Extra Information
+        return true;
+    }
+
+    static bool HandleGuildListCommand(ChatHandler* handler)
+    {
+        std::string_view titleAndSummaryColor = handler->IsConsole() ? ""sv : "|cff00ff00"sv;
+        std::string_view tableHeaderColor = handler->IsConsole() ? ""sv : "|cff00ffff"sv;
+        std::string_view resetColor = handler->IsConsole() ? ""sv : "|r"sv;
+
+        handler->PSendSysMessage(LANG_GUILD_LIST_TITLE, titleAndSummaryColor, resetColor);
+        handler->PSendSysMessage(LANG_GUILD_LIST_HEADER, tableHeaderColor, resetColor);
+
+        GuildMgr::GuildContainer const& guildStore = sGuildMgr->GetGuildStore();
+
+        for (auto const& [id, g] : guildStore)
+        {
+            std::string gmName;
+            if (!sCharacterCache->GetCharacterNameByGuid(g->GetLeaderGUID(), gmName))
+                gmName = "---";
+
+            handler->PSendSysMessage(LANG_GUILD_LIST_ROW,
+                id,
+                g->GetName().c_str(),
+                gmName.c_str(),
+                TimeToTimestampStr(g->GetCreatedDate()).c_str(),
+                g->GetMembersCount(),
+                g->GetBankMoney() / GOLD
+            );
+        }
+
+        handler->PSendSysMessage(LANG_GUILD_LIST_TOTAL, titleAndSummaryColor, guildStore.size(), resetColor);
         return true;
     }
 };

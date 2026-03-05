@@ -16,9 +16,29 @@
  */
 
 #include "CombatLogPackets.h"
+#include "PacketOperators.h"
+#include "Spell.h"
 #include "UnitDefines.h"
 
-WorldPacket const* WorldPackets::CombatLog::SpellNonMeleeDamageLog::Write()
+namespace WorldPackets::CombatLog
+{
+ByteBuffer& operator<<(ByteBuffer& data, CombatWorldTextViewerInfo const& worldTextViewer)
+{
+    data << worldTextViewer.ViewerGUID;
+    data << OptionalInit(worldTextViewer.ColorType);
+    data << OptionalInit(worldTextViewer.ScaleType);
+    data.FlushBits();
+
+    if (worldTextViewer.ColorType)
+        data << uint8(*worldTextViewer.ColorType);
+
+    if (worldTextViewer.ScaleType)
+        data << uint8(*worldTextViewer.ScaleType);
+
+    return data;
+}
+
+WorldPacket const* SpellNonMeleeDamageLog::Write()
 {
     *this << Me;
     *this << CasterGUID;
@@ -32,12 +52,23 @@ WorldPacket const* WorldPackets::CombatLog::SpellNonMeleeDamageLog::Write()
     *this << int32(Absorbed);
     *this << int32(Resisted);
     *this << int32(ShieldBlock);
-    WriteBit(Periodic);
-    WriteBits(Flags, 7);
-    WriteBit(false); // Debug info
+    *this << int32(ReflectingSpellID);
+    *this << int32(Flags);
+    *this << Size<uint32>(WorldTextViewers);
+    *this << Size<uint32>(Supporters);
+
+    for (Spells::SpellSupportInfo const& supportInfo : Supporters)
+        *this << supportInfo;
+
+    *this << Bits<1>(Periodic);
+    *this << Bits<1>(false); // Debug info
     WriteLogDataBit();
-    WriteBit(ContentTuning.has_value());
+    *this << OptionalInit(ContentTuning);
     FlushBits();
+
+    for (CombatWorldTextViewerInfo const& worldTextViewer : WorldTextViewers)
+        *this << worldTextViewer;
+
     WriteLogData();
     if (ContentTuning)
         *this << *ContentTuning;
@@ -45,7 +76,7 @@ WorldPacket const* WorldPackets::CombatLog::SpellNonMeleeDamageLog::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* WorldPackets::CombatLog::EnvironmentalDamageLog::Write()
+WorldPacket const* EnvironmentalDamageLog::Write()
 {
     *this << Victim;
     *this << uint8(Type);
@@ -59,11 +90,11 @@ WorldPacket const* WorldPackets::CombatLog::EnvironmentalDamageLog::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* WorldPackets::CombatLog::SpellExecuteLog::Write()
+WorldPacket const* SpellExecuteLog::Write()
 {
     *this << Caster;
     *this << int32(SpellID);
-    *this << uint32(Effects->size());
+    *this << Size<uint32>(*Effects);
 
     for (SpellLogEffect const& effect : *Effects)
     {
@@ -82,7 +113,7 @@ WorldPacket const* WorldPackets::CombatLog::SpellExecuteLog::Write()
             {
                 *this << powerDrainTarget.Victim;
                 *this << uint32(powerDrainTarget.Points);
-                *this << uint32(powerDrainTarget.PowerType);
+                *this << int8(powerDrainTarget.PowerType);
                 *this << float(powerDrainTarget.Amplitude);
             }
         }
@@ -126,7 +157,7 @@ WorldPacket const* WorldPackets::CombatLog::SpellExecuteLog::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* WorldPackets::CombatLog::SpellHealLog::Write()
+WorldPacket const* SpellHealLog::Write()
 {
     *this << TargetGUID;
     *this << CasterGUID;
@@ -135,11 +166,16 @@ WorldPacket const* WorldPackets::CombatLog::SpellHealLog::Write()
     *this << int32(OriginalHeal);
     *this << int32(OverHeal);
     *this << int32(Absorbed);
-    WriteBit(Crit);
-    WriteBit(CritRollMade.has_value());
-    WriteBit(CritRollNeeded.has_value());
+    *this << Size<uint32>(Supporters);
+
+    for (Spells::SpellSupportInfo const& supportInfo : Supporters)
+        *this << supportInfo;
+
+    *this << Bits<1>(Crit);
+    *this << OptionalInit(CritRollMade);
+    *this << OptionalInit(CritRollNeeded);
     WriteLogDataBit();
-    WriteBit(ContentTuning.has_value());
+    *this << OptionalInit(ContentTuning);
     FlushBits();
 
     WriteLogData();
@@ -156,61 +192,78 @@ WorldPacket const* WorldPackets::CombatLog::SpellHealLog::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* WorldPackets::CombatLog::SpellPeriodicAuraLog::Write()
+ByteBuffer& operator<<(ByteBuffer& data, PeriodicalAuraLogEffectDebugInfo const& debugInfo)
+{
+    data << float(debugInfo.CritRollMade);
+    data << float(debugInfo.CritRollNeeded);
+
+    return data;
+}
+
+ByteBuffer& operator<<(ByteBuffer& data, PeriodicAuraLogEffect const& effect)
+{
+    data << int32(effect.Effect);
+    data << int32(effect.Amount);
+    data << int32(effect.OriginalDamage);
+    data << int32(effect.OverHealOrKill);
+    data << int32(effect.SchoolMaskOrPower);
+    data << int32(effect.AbsorbedOrAmplitude);
+    data << int32(effect.Resisted);
+    data << Size<uint32>(effect.Supporters);
+
+    for (Spells::SpellSupportInfo const& supportInfo : effect.Supporters)
+        data << supportInfo;
+
+    data << Bits<1>(effect.Crit);
+    data << OptionalInit(effect.DebugInfo);
+    data << OptionalInit(effect.ContentTuning);
+    data.FlushBits();
+
+    if (effect.ContentTuning)
+        data << *effect.ContentTuning;
+
+    if (effect.DebugInfo)
+        data << *effect.DebugInfo;
+
+    return data;
+}
+
+WorldPacket const* SpellPeriodicAuraLog::Write()
 {
     *this << TargetGUID;
     *this << CasterGUID;
     *this << int32(SpellID);
-    *this << uint32(Effects.size());
+    *this << Size<uint32>(Effects);
     WriteLogDataBit();
     FlushBits();
 
-    for (SpellLogEffect const& effect : Effects)
-    {
-        *this << int32(effect.Effect);
-        *this << int32(effect.Amount);
-        *this << int32(effect.OriginalDamage);
-        *this << int32(effect.OverHealOrKill);
-        *this << int32(effect.SchoolMaskOrPower);
-        *this << int32(effect.AbsorbedOrAmplitude);
-        *this << int32(effect.Resisted);
-        WriteBit(effect.Crit);
-        WriteBit(effect.DebugInfo.has_value());
-        WriteBit(effect.ContentTuning.has_value());
-        FlushBits();
-
-        if (effect.ContentTuning)
-            *this << *effect.ContentTuning;
-
-        if (effect.DebugInfo)
-        {
-            *this << float(effect.DebugInfo->CritRollMade);
-            *this << float(effect.DebugInfo->CritRollNeeded);
-        }
-    }
+    for (PeriodicAuraLogEffect const& effect : Effects)
+        *this << effect;
 
     WriteLogData();
 
     return &_worldPacket;
 }
 
-WorldPacket const* WorldPackets::CombatLog::SpellInterruptLog::Write()
+WorldPacket const* SpellInterruptLog::Write()
 {
     _worldPacket << Caster;
     _worldPacket << Victim;
     _worldPacket << int32(InterruptedSpellID);
     _worldPacket << int32(SpellID);
+    _worldPacket << Bits<1>(HideFromCombatLog);
+    _worldPacket.FlushBits();
 
     return &_worldPacket;
 }
 
-WorldPacket const* WorldPackets::CombatLog::SpellEnergizeLog::Write()
+WorldPacket const* SpellEnergizeLog::Write()
 {
     *this << TargetGUID;
     *this << CasterGUID;
 
     *this << int32(SpellID);
-    *this << int32(Type);
+    *this << int8(Type);
     *this << int32(Amount);
     *this << int32(OverEnergize);
 
@@ -221,7 +274,7 @@ WorldPacket const* WorldPackets::CombatLog::SpellEnergizeLog::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* WorldPackets::CombatLog::SpellInstakillLog::Write()
+WorldPacket const* SpellInstakillLog::Write()
 {
     _worldPacket << Target;
     _worldPacket << Caster;
@@ -230,42 +283,46 @@ WorldPacket const* WorldPackets::CombatLog::SpellInstakillLog::Write()
     return &_worldPacket;
 }
 
-ByteBuffer& operator<<(ByteBuffer& buffer, WorldPackets::CombatLog::SpellLogMissDebug const& missDebug)
+ByteBuffer& operator<<(ByteBuffer& buffer, SpellLogMissDebug const& missDebug)
 {
     buffer << float(missDebug.HitRoll);
     buffer << float(missDebug.HitRollNeeded);
+
     return buffer;
 }
 
-ByteBuffer& operator<<(ByteBuffer& buffer, WorldPackets::CombatLog::SpellLogMissEntry const& missEntry)
+ByteBuffer& operator<<(ByteBuffer& buffer, SpellLogMissEntry const& missEntry)
 {
     buffer << missEntry.Victim;
     buffer << uint8(missEntry.MissReason);
-    if (buffer.WriteBit(missEntry.Debug.has_value()))
+    buffer << OptionalInit(missEntry.Debug);
+    if (missEntry.Debug)
         buffer << *missEntry.Debug;
 
     buffer.FlushBits();
+
     return buffer;
 }
 
-WorldPacket const* WorldPackets::CombatLog::SpellMissLog::Write()
+WorldPacket const* SpellMissLog::Write()
 {
     _worldPacket << int32(SpellID);
     _worldPacket << Caster;
-    _worldPacket << uint32(Entries.size());
+    _worldPacket << Size<uint32>(Entries);
+    _worldPacket << Bits<1>(HideFromCombatLog);
     for (SpellLogMissEntry const& missEntry : Entries)
         _worldPacket << missEntry;
 
     return &_worldPacket;
 }
 
-WorldPacket const* WorldPackets::CombatLog::ProcResist::Write()
+WorldPacket const* ProcResist::Write()
 {
     _worldPacket << Caster;
     _worldPacket << Target;
     _worldPacket << int32(SpellID);
-    _worldPacket.WriteBit(Rolled.has_value());
-    _worldPacket.WriteBit(Needed.has_value());
+    _worldPacket << OptionalInit(Rolled);
+    _worldPacket << OptionalInit(Needed);
     _worldPacket.FlushBits();
 
     if (Rolled)
@@ -277,18 +334,18 @@ WorldPacket const* WorldPackets::CombatLog::ProcResist::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* WorldPackets::CombatLog::SpellOrDamageImmune::Write()
+WorldPacket const* SpellOrDamageImmune::Write()
 {
     _worldPacket << CasterGUID;
     _worldPacket << VictimGUID;
     _worldPacket << uint32(SpellID);
-    _worldPacket.WriteBit(IsPeriodic);
+    _worldPacket << Bits<1>(IsPeriodic);
     _worldPacket.FlushBits();
 
     return &_worldPacket;
 }
 
-WorldPacket const* WorldPackets::CombatLog::SpellDamageShield::Write()
+WorldPacket const* SpellDamageShield::Write()
 {
     *this << Attacker;
     *this << Defender;
@@ -305,10 +362,10 @@ WorldPacket const* WorldPackets::CombatLog::SpellDamageShield::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* WorldPackets::CombatLog::AttackerStateUpdate::Write()
+WorldPacket const* AttackerStateUpdate::Write()
 {
     ByteBuffer attackRoundInfo;
-    attackRoundInfo << uint32(HitInfo);
+    attackRoundInfo << uint32(Flags);
     attackRoundInfo << AttackerGUID;
     attackRoundInfo << VictimGUID;
     attackRoundInfo << int32(Damage);
@@ -317,98 +374,89 @@ WorldPacket const* WorldPackets::CombatLog::AttackerStateUpdate::Write()
     attackRoundInfo << uint8(SubDmg.has_value());
     if (SubDmg)
     {
-       attackRoundInfo << int32(SubDmg->SchoolMask);
-       attackRoundInfo << float(SubDmg->FDamage);
-       attackRoundInfo << int32(SubDmg->Damage);
-        if (HitInfo & (HITINFO_FULL_ABSORB | HITINFO_PARTIAL_ABSORB))
+        attackRoundInfo << int32(SubDmg->SchoolMask);
+        attackRoundInfo << float(SubDmg->FDamage);
+        attackRoundInfo << int32(SubDmg->Damage);
+        if (Flags & (HITINFO_FULL_ABSORB | HITINFO_PARTIAL_ABSORB))
             attackRoundInfo << int32(SubDmg->Absorbed);
-        if (HitInfo & (HITINFO_FULL_RESIST | HITINFO_PARTIAL_RESIST))
+        if (Flags & (HITINFO_FULL_RESIST | HITINFO_PARTIAL_RESIST))
             attackRoundInfo << int32(SubDmg->Resisted);
     }
 
     attackRoundInfo << uint8(VictimState);
     attackRoundInfo << uint32(AttackerState);
     attackRoundInfo << uint32(MeleeSpellID);
-    if (HitInfo & HITINFO_BLOCK)
+    if (Flags & HITINFO_BLOCK)
         attackRoundInfo << int32(BlockAmount);
 
-    if (HitInfo & HITINFO_RAGE_GAIN)
+    if (Flags & HITINFO_RAGE_GAIN)
         attackRoundInfo << int32(RageGained);
 
-    if (HitInfo & HITINFO_UNK1)
+    if (Flags & HITINFO_UNK1)
     {
-        attackRoundInfo << uint32(UnkState.State1);
-        attackRoundInfo << float(UnkState.State2);
-        attackRoundInfo << float(UnkState.State3);
-        attackRoundInfo << float(UnkState.State4);
-        attackRoundInfo << float(UnkState.State5);
-        attackRoundInfo << float(UnkState.State6);
-        attackRoundInfo << float(UnkState.State7);
-        attackRoundInfo << float(UnkState.State8);
-        attackRoundInfo << float(UnkState.State9);
-        attackRoundInfo << float(UnkState.State10);
-        attackRoundInfo << float(UnkState.State11);
-        attackRoundInfo << uint32(UnkState.State12);
+        attackRoundInfo << uint32(HitInfo.ArmorReduction);
+        attackRoundInfo << float(HitInfo.CritRollNeeded);
+        attackRoundInfo << float(HitInfo.CombatRoll);
+        attackRoundInfo << float(HitInfo.MissChance);
+        attackRoundInfo << float(HitInfo.DodgeChance);
+        attackRoundInfo << float(HitInfo.ParryChance);
+        attackRoundInfo << float(HitInfo.BlockChance);
+        attackRoundInfo << float(HitInfo.GlanceChance);
+        attackRoundInfo << float(HitInfo.CrushChance);
+        attackRoundInfo << float(HitInfo.MinDamage);
+        attackRoundInfo << float(HitInfo.MaxDamage);
+        attackRoundInfo << uint32(HitInfo.SinceLastSwing);
     }
 
-    if (HitInfo & (HITINFO_BLOCK | HITINFO_UNK12))
-        attackRoundInfo << float(Unk);
+    if (Flags & (HITINFO_BLOCK | HITINFO_UNK12))
+        attackRoundInfo << float(BlockRoll);
 
-    attackRoundInfo << uint8(ContentTuning.Type);
-    attackRoundInfo << uint8(ContentTuning.TargetLevel);
-    attackRoundInfo << uint8(ContentTuning.Expansion);
-    attackRoundInfo << int16(ContentTuning.PlayerLevelDelta);
-    attackRoundInfo << int8(ContentTuning.TargetScalingLevelDelta);
-    attackRoundInfo << float(ContentTuning.PlayerItemLevel);
-    attackRoundInfo << float(ContentTuning.TargetItemLevel);
-    attackRoundInfo << uint16(ContentTuning.ScalingHealthItemLevelCurveID);
-    attackRoundInfo << uint32(ContentTuning.Flags);
-    attackRoundInfo << int32(ContentTuning.PlayerContentTuningID);
-    attackRoundInfo << int32(ContentTuning.TargetContentTuningID);
+    attackRoundInfo << ContentTuning;
 
     WriteLogDataBit();
     FlushBits();
     WriteLogData();
 
-    *this << uint32(attackRoundInfo.size());
+    *this << Size<uint32>(attackRoundInfo);
     _worldPacket.append(attackRoundInfo);
     _fullLogPacket.append(attackRoundInfo);
 
     return &_worldPacket;
 }
 
-ByteBuffer& operator<<(ByteBuffer& buffer, WorldPackets::CombatLog::SpellDispellData const& dispellData)
+ByteBuffer& operator<<(ByteBuffer& buffer, SpellDispellData const& dispellData)
 {
     buffer << int32(dispellData.SpellID);
-    buffer.WriteBit(dispellData.Harmful);
-    buffer.WriteBit(dispellData.Rolled.has_value());
-    buffer.WriteBit(dispellData.Needed.has_value());
-    if (dispellData.Rolled.has_value())
-        buffer << int32(*dispellData.Rolled);
-    if (dispellData.Needed.has_value())
-        buffer << int32(*dispellData.Needed);
-
+    buffer << Bits<1>(dispellData.Harmful);
+    buffer << OptionalInit(dispellData.Rolled);
+    buffer << OptionalInit(dispellData.Needed);
     buffer.FlushBits();
+
+    if (dispellData.Rolled)
+        buffer << int32(*dispellData.Rolled);
+
+    if (dispellData.Needed)
+        buffer << int32(*dispellData.Needed);
 
     return buffer;
 }
 
-WorldPacket const* WorldPackets::CombatLog::SpellDispellLog::Write()
+WorldPacket const* SpellDispellLog::Write()
 {
-    _worldPacket.WriteBit(IsSteal);
-    _worldPacket.WriteBit(IsBreak);
+    _worldPacket << Bits<1>(IsSteal);
+    _worldPacket << Bits<1>(IsBreak);
     _worldPacket << TargetGUID;
     _worldPacket << CasterGUID;
     _worldPacket << int32(DispelledBySpellID);
 
-    _worldPacket << uint32(DispellData.size());
+    _worldPacket << Size<uint32>(DispellData);
     for (SpellDispellData const& data : DispellData)
         _worldPacket << data;
 
     return &_worldPacket;
 }
 
-WorldPacket const* WorldPackets::CombatLog::SpellAbsorbLog::Write()
+WorldPacket const* SpellAbsorbLog::Write()
 {
     *this << Attacker;
     *this << Victim;
@@ -417,7 +465,12 @@ WorldPacket const* WorldPackets::CombatLog::SpellAbsorbLog::Write()
     *this << Caster;
     *this << int32(Absorbed);
     *this << int32(OriginalDamage);
-    WriteBit(Unk);
+    *this << Size<uint32>(Supporters);
+
+    for (Spells::SpellSupportInfo const& supportInfo : Supporters)
+        *this << supportInfo;
+
+    *this << Bits<1>(Crit);
     WriteLogDataBit();
     FlushBits();
     WriteLogData();
@@ -425,20 +478,25 @@ WorldPacket const* WorldPackets::CombatLog::SpellAbsorbLog::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* WorldPackets::CombatLog::SpellHealAbsorbLog::Write()
+WorldPacket const* SpellHealAbsorbLog::Write()
 {
-    _worldPacket << Target;
-    _worldPacket << AbsorbCaster;
-    _worldPacket << Healer;
-    _worldPacket << int32(AbsorbSpellID);
-    _worldPacket << int32(AbsorbedSpellID);
-    _worldPacket << int32(Absorbed);
-    _worldPacket << int32(OriginalHeal);
-    _worldPacket.WriteBit(ContentTuning.has_value());
-    _worldPacket.FlushBits();
+    *this << Target;
+    *this << AbsorbCaster;
+    *this << Healer;
+    *this << int32(AbsorbSpellID);
+    *this << int32(AbsorbedSpellID);
+    *this << int32(Absorbed);
+    *this << int32(OriginalHeal);
+
+    WriteLogDataBit();
+    *this << OptionalInit(ContentTuning);
+    FlushBits();
+
+    WriteLogData();
 
     if (ContentTuning)
-        _worldPacket << *ContentTuning;
+        *this << *ContentTuning;
 
     return &_worldPacket;
+}
 }

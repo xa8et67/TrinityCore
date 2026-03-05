@@ -16,6 +16,7 @@
  */
 
 #include "culling_of_stratholme.h"
+#include "Containers.h"
 #include "GameObject.h"
 #include "InstanceScript.h"
 #include "Log.h"
@@ -30,6 +31,7 @@
 #include "ScriptedGossip.h"
 #include "ScriptMgr.h"
 #include "ScriptSystem.h"
+#include "SmartEnum.h"
 #include "SpellScript.h"
 #include "SplineChainMovementGenerator.h"
 #include "TemporarySummon.h"
@@ -500,8 +502,7 @@ static std::array<Position, NUM_POSITIONS> const ArthasPositions =
     }
 };
 
-uint32 const chromiePathSize = 3;
-G3D::Vector3 const ChromieSplinePos[chromiePathSize] =
+G3D::Vector3 const ChromieSplinePos[] =
 {
     { 2320.632f, 1507.193f, 152.5081f },
     { 2319.823f, 1506.605f, 152.5081f },
@@ -555,10 +556,10 @@ public:
 
         void AdvanceToState(COSProgressStates newState)
         {
-            TC_LOG_TRACE("scripts.cos", "npc_arthas_stratholmeAI::AdvanceToState: advancing to 0x%X", newState);
+            TC_LOG_TRACE("scripts.cos", "npc_arthas_stratholmeAI::AdvanceToState: advancing to 0x{:X}", newState);
             if (!_progressRP)
             {
-                TC_LOG_WARN("scripts.cos", "npc_arthas_stratholmeAI::AdvanceToState: advancing to instance state 0x%X, but RP is paused. Overriding!", newState);
+                TC_LOG_WARN("scripts.cos", "npc_arthas_stratholmeAI::AdvanceToState: advancing to instance state 0x{:X}, but RP is paused. Overriding!", newState);
                 _progressRP = true;
             }
 
@@ -580,7 +581,7 @@ public:
                 else
                     me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
 
-                TC_LOG_TRACE("scripts.cos", "npc_arthas_stratholmeAI::AdvanceToState: has snapback for this state, distance = %f", target.SnapbackPosition->GetExactDist(me));
+                TC_LOG_TRACE("scripts.cos", "npc_arthas_stratholmeAI::AdvanceToState: has snapback for this state, distance = {}", target.SnapbackPosition->GetExactDist(me));
                 // Snapback handling - if we're too far from where we're supposed to be, teleport there
                 if (target.SnapbackPosition->GetExactDist(me) > ArthasSnapbackDistanceThreshold)
                     me->NearTeleportTo(*target.SnapbackPosition);
@@ -906,8 +907,6 @@ public:
             }
             else
                 _exorcismCooldown -= diff;
-
-            DoMeleeAttackIfReady();
         }
 
         void UpdateAI(uint32 diff) override
@@ -1468,10 +1467,9 @@ public:
                             chromie->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP | UNIT_NPC_FLAG_QUESTGIVER);
                             std::function<void(Movement::MoveSplineInit&)> initializer = [](Movement::MoveSplineInit& init)
                             {
-                                Movement::PointsArray path(ChromieSplinePos, ChromieSplinePos + chromiePathSize);
                                 init.SetFly();
                                 init.SetWalk(true);
-                                init.MovebyPath(path, 0);
+                                init.MovebyPath(ChromieSplinePos);
                             };
                             chromie->GetMotionMaster()->LaunchMoveSpline(std::move(initializer), 0, MOTION_PRIORITY_NORMAL, POINT_MOTION_TYPE);
                         }
@@ -1533,7 +1531,7 @@ public:
 
         void JustEngagedWith(Unit* who) override
         {
-            TC_LOG_TRACE("scripts.cos", "npc_arthas_stratholmeAI::JustEngagedWith: RP in progress? '%s'", _progressRP ? "YES" : "NO");
+            TC_LOG_TRACE("scripts.cos", "npc_arthas_stratholmeAI::JustEngagedWith: RP in progress? '{}'", _progressRP ? "YES" : "NO");
             if (_progressRP)
             {
                 _progressRP = false;
@@ -1550,7 +1548,7 @@ public:
 
         void EnterEvadeMode(EvadeReason why) override
         {
-            TC_LOG_TRACE("scripts.cos", "npc_arthas_stratholmeAI::EnterEvadeMode: why = %u ", why);
+            TC_LOG_TRACE("scripts.cos", "npc_arthas_stratholmeAI::EnterEvadeMode: why = {} ", EnumUtils::ToConstant(why));
             ScriptedAI::EnterEvadeMode(why);
         }
 
@@ -1600,7 +1598,7 @@ public:
         bool OnGossipSelect(Player* player, uint32 /*sender*/, uint32 listId) override
         {
             uint32 const action = GetGossipActionFor(player, listId);
-            TC_LOG_TRACE("scripts.cos", "npc_arthas_stratholmeAI::GossipSelect: '%s' selects action '%u' on '%s'", player->GetGUID().ToString().c_str(), action, me->GetGUID().ToString().c_str());
+            TC_LOG_TRACE("scripts.cos", "npc_arthas_stratholmeAI::GossipSelect: '{}' selects action '{}' on '{}'", player->GetGUID().ToString(), action, me->GetGUID().ToString());
 
             AdvanceDungeon(player, PURGE_PENDING, DATA_START_PURGE);
             AdvanceDungeon(player, TOWN_HALL_PENDING, DATA_START_TOWN_HALL);
@@ -1656,8 +1654,6 @@ struct npc_stratholme_rp_dummy : NullCreatureAI
 // 50773 - Crusader Strike
 class spell_stratholme_crusader_strike : public SpellScript
 {
-    PrepareSpellScript(spell_stratholme_crusader_strike);
-
     void HandleDummy(SpellEffIndex /*effIndex*/)
     {
         if (Unit* target = GetHitUnit())

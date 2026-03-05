@@ -22,14 +22,13 @@
 #include "InstanceScript.h"
 #include "Map.h"
 
-DoorData const doorData[] =
+static constexpr DoorData doorData[] =
 {
-    { GO_CONTAINMENT_CORE_SECURITY_FIELD_ALPHA, DATA_SOCCOTHRATES,  DOOR_TYPE_PASSAGE },
-    { GO_CONTAINMENT_CORE_SECURITY_FIELD_BETA,  DATA_DALLIAH,       DOOR_TYPE_PASSAGE },
-    { 0,                                        0,                  DOOR_TYPE_ROOM } // END
+    { GO_CONTAINMENT_CORE_SECURITY_FIELD_ALPHA, DATA_SOCCOTHRATES,  EncounterDoorBehavior::OpenWhenDone },
+    { GO_CONTAINMENT_CORE_SECURITY_FIELD_BETA,  DATA_DALLIAH,       EncounterDoorBehavior::OpenWhenDone },
 };
 
-DungeonEncounterData const encounters[] =
+static constexpr DungeonEncounterData encounters[] =
 {
     { DATA_ZEREKETH, {{ 1916 }} },
     { DATA_DALLIAH, {{ 1913 }} },

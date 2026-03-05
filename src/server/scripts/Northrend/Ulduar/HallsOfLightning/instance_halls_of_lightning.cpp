@@ -21,34 +21,31 @@
 #include "GameObject.h"
 #include "halls_of_lightning.h"
 #include "InstanceScript.h"
-#include "Map.h"
 
-DoorData const doorData[] =
+static constexpr DoorData doorData[] =
 {
-    { GO_VOLKHAN_DOOR, DATA_VOLKHAN, DOOR_TYPE_PASSAGE },
-    { GO_IONAR_DOOR,   DATA_IONAR,   DOOR_TYPE_PASSAGE },
-    { GO_LOKEN_DOOR,   DATA_LOKEN,   DOOR_TYPE_PASSAGE },
-    { 0,               0,            DOOR_TYPE_ROOM    } // END
+    { GO_VOLKHAN_DOOR, DATA_VOLKHAN, EncounterDoorBehavior::OpenWhenDone },
+    { GO_IONAR_DOOR,   DATA_IONAR,   EncounterDoorBehavior::OpenWhenDone },
+    { GO_LOKEN_DOOR,   DATA_LOKEN,   EncounterDoorBehavior::OpenWhenDone },
 };
 
-ObjectData const creatureData[] =
+static constexpr ObjectData creatureData[] =
 {
     { NPC_GENERAL_BJARNGRIM,    DATA_GENERAL_BJARNGRIM  },
     { NPC_VOLKHAN,              DATA_VOLKHAN            },
     { NPC_IONAR,                DATA_IONAR              },
     { NPC_LOKEN,                DATA_LOKEN              },
+    { NPC_INVISIBLE_STALKER,    DATA_INVISIBLE_STALKER  },
     { NPC_VOLKHANS_ANVIL,       DATA_VOLKHANS_ANVIL     },
-    { 0,                        0                       } // END
 };
 
-ObjectData const gameObjectData[] =
+static constexpr ObjectData gameObjectData[] =
 {
     { GO_VOLKHAN_TEMPER_VISUAL, DATA_VOLKHAN_TEMPER_VISUAL },
     { GO_LOKEN_THRONE,          DATA_LOKEN_GLOBE           },
-    { 0,                        0                          } // END
 };
 
-DungeonEncounterData const encounters[] =
+static constexpr DungeonEncounterData encounters[] =
 {
     { DATA_GENERAL_BJARNGRIM, {{ 1987 }} },
     { DATA_VOLKHAN, {{ 1985 }} },

@@ -19,6 +19,7 @@
 #define TRINITY_RANDOMMOTIONGENERATOR_H
 
 #include "MovementGenerator.h"
+#include "Optional.h"
 #include "Position.h"
 #include "Timer.h"
 
@@ -28,12 +29,14 @@ template<class T>
 class RandomMovementGenerator : public MovementGeneratorMedium<T, RandomMovementGenerator<T>>
 {
     public:
-        explicit RandomMovementGenerator(float distance = 0.0f);
+        explicit RandomMovementGenerator(float distance, Optional<Milliseconds> duration = {}, Optional<float> speed = {},
+            MovementWalkRunSpeedSelectionMode speedSelectionMode = MovementWalkRunSpeedSelectionMode::Default,
+            Scripting::v2::ActionResultSetter<MovementStopReason>&& scriptResult = {});
 
         MovementGeneratorType GetMovementGeneratorType() const override;
 
-        void Pause(uint32 timer = 0) override;
-        void Resume(uint32 overrideTimer = 0) override;
+        void Pause(uint32 timer) override;
+        void Resume(uint32 overrideTimer) override;
 
         void DoInitialize(T*);
         void DoReset(T*);
@@ -48,6 +51,9 @@ class RandomMovementGenerator : public MovementGeneratorMedium<T, RandomMovement
 
         std::unique_ptr<PathGenerator> _path;
         TimeTracker _timer;
+        Optional<TimeTracker> _duration;
+        Optional<float> _speed;
+        MovementWalkRunSpeedSelectionMode _speedSelectionMode;
         Position _reference;
         float _wanderDistance;
         uint8 _wanderSteps;

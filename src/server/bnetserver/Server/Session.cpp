@@ -16,18 +16,30 @@
  */
 
 #include "Session.h"
+#include "AccountService.h"
+#include "AuthenticationService.h"
 #include "BattlenetRpcErrorCodes.h"
 #include "ByteConverter.h"
 #include "CryptoRandom.h"
 #include "DatabaseEnv.h"
 #include "Errors.h"
+#include "Hash.h"
 #include "IPLocation.h"
-#include "QueryCallback.h"
+#include "IpBanCheckConnectionInitializer.h"
 #include "LoginRESTService.h"
+#include "MapUtils.h"
 #include "ProtobufJSON.h"
+#include "QueryCallback.h"
 #include "RealmList.h"
-#include "ServiceDispatcher.h"
 #include "RealmList.pb.h"
+#include "ServiceDispatcher.h"
+#include "SslContext.h"
+#include "Timezone.h"
+#include "attribute_types.pb.h"
+#include "challenge_service.pb.h"
+#include "game_utilities_service.pb.h"
+#include "rpc_types.pb.h"
+#include <rapidjson/document.h>
 #include <zlib.h>
 
 void Battlenet::Session::AccountInfo::LoadResult(PreparedQueryResult result)
@@ -43,7 +55,7 @@ void Battlenet::Session::AccountInfo::LoadResult(PreparedQueryResult result)
     IsBanned = fields[6].GetUInt64() != 0;
     IsPermanenetlyBanned = fields[7].GetUInt64() != 0;
 
-    static uint32 const GameAccountFieldsOffset = 8;
+    static constexpr uint32 GameAccountFieldsOffset = 8;
 
     do
     {
@@ -52,7 +64,7 @@ void Battlenet::Session::AccountInfo::LoadResult(PreparedQueryResult result)
     } while (result->NextRow());
 }
 
-void Battlenet::Session::GameAccountInfo::LoadResult(Field* fields)
+void Battlenet::Session::GameAccountInfo::LoadResult(Field const* fields)
 {
     // a.id, a.username, ab.unbandate, ab.unbandate = ab.bandate, aa.SecurityLevel
     Id = fields[0].GetUInt32();
@@ -69,62 +81,38 @@ void Battlenet::Session::GameAccountInfo::LoadResult(Field* fields)
         DisplayName = Name;
 }
 
-Battlenet::Session::Session(tcp::socket&& socket) : BattlenetSocket(std::move(socket)), _accountInfo(new AccountInfo()), _gameAccountInfo(nullptr), _locale(),
-    _os(), _build(0), _ipCountry(), _authed(false), _requestToken(0)
+Battlenet::Session::Session(Trinity::Net::IoContextTcpSocket&& socket) : _socket(CreateSocket(std::move(socket))),
+    _accountInfo(new AccountInfo()), _gameAccountInfo(nullptr), _locale(),
+    _os(), _build(0), _clientInfo(), _timezoneOffset(0min), _ipCountry(), _clientSecret(), _authed(false), _requestToken(0)
 {
     _headerLengthBuffer.Resize(2);
 }
 
-Battlenet::Session::~Session()
-{
-}
+Battlenet::Session::~Session() = default;
 
-void Battlenet::Session::AsyncHandshake()
+std::shared_ptr<Battlenet::Session::Socket> Battlenet::Session::CreateSocket(Trinity::Net::IoContextTcpSocket&& socket)
 {
-    underlying_stream().async_handshake(boost::asio::ssl::stream_base::server, std::bind(&Session::HandshakeHandler, shared_from_this(), std::placeholders::_1));
+    return std::make_shared<Socket>(std::move(socket), SslContext::instance());
 }
 
 void Battlenet::Session::Start()
 {
-    std::string ip_address = GetRemoteIpAddress().to_string();
-    TC_LOG_TRACE("session", "%s Accepted connection", GetClientInfo().c_str());
+    TC_LOG_TRACE("session", "{} Accepted connection", GetClientInfo());
 
-    // Verify that this IP is not in the ip_banned table
-    LoginDatabase.Execute(LoginDatabase.GetPreparedStatement(LOGIN_DEL_EXPIRED_IP_BANS));
+    // build initializer chain
+    std::array<std::shared_ptr<Trinity::Net::SocketConnectionInitializer>, 3> initializers =
+    { {
+        std::make_shared<Trinity::Net::IpBanCheckConnectionInitializer<Session>>(this),
+        std::make_shared<Trinity::Net::SslHandshakeConnectionInitializer<Socket>>(_socket.get()),
+        std::make_shared<Trinity::Net::ReadConnectionInitializer<Socket, Session>>(_socket.get(), this),
+    } };
 
-    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_IP_INFO);
-    stmt->setString(0, ip_address);
-
-    _queryProcessor.AddCallback(LoginDatabase.AsyncQuery(stmt).WithPreparedCallback(std::bind(&Battlenet::Session::CheckIpCallback, this, std::placeholders::_1)));
-}
-
-void Battlenet::Session::CheckIpCallback(PreparedQueryResult result)
-{
-    if (result)
-    {
-        bool banned = false;
-        do
-        {
-            Field* fields = result->Fetch();
-            if (fields[0].GetUInt64() != 0)
-                banned = true;
-
-        } while (result->NextRow());
-
-        if (banned)
-        {
-            TC_LOG_DEBUG("session", "%s tries to log in using banned IP!", GetClientInfo().c_str());
-            CloseSocket();
-            return;
-        }
-    }
-
-    AsyncHandshake();
+    Trinity::Net::SocketConnectionInitializer::SetupChain(initializers)->Start();
 }
 
 bool Battlenet::Session::Update()
 {
-    if (!BattlenetSocket::Update())
+    if (!_socket->Update())
         return false;
 
     _queryProcessor.ProcessReadyCallbacks();
@@ -134,10 +122,10 @@ bool Battlenet::Session::Update()
 
 void Battlenet::Session::AsyncWrite(MessageBuffer* packet)
 {
-    if (!IsOpen())
+    if (!_socket->IsOpen())
         return;
 
-    QueuePacket(std::move(*packet));
+    _socket->QueuePacket(std::move(*packet));
 }
 
 void Battlenet::Session::SendResponse(uint32 token, pb::Message const* response)
@@ -205,23 +193,28 @@ void Battlenet::Session::SendRequest(uint32 serviceHash, uint32 methodId, pb::Me
     AsyncWrite(&packet);
 }
 
+void Battlenet::Session::QueueQuery(QueryCallback&& queryCallback)
+{
+    _queryProcessor.AddCallback(std::move(queryCallback));
+}
+
 uint32 Battlenet::Session::HandleLogon(authentication::v1::LogonRequest const* logonRequest, std::function<void(ServiceBase*, uint32, ::google::protobuf::Message const*)>& continuation)
 {
     if (logonRequest->program() != "WoW")
     {
-        TC_LOG_DEBUG("session", "[Battlenet::LogonRequest] %s attempted to log in with game other than WoW (using %s)!", GetClientInfo().c_str(), logonRequest->program().c_str());
+        TC_LOG_DEBUG("session", "[Battlenet::LogonRequest] {} attempted to log in with game other than WoW (using {})!", GetClientInfo(), logonRequest->program());
         return ERROR_BAD_PROGRAM;
     }
 
-    if (logonRequest->platform() != "Win" && logonRequest->platform() != "Wn64" && logonRequest->platform() != "Mc64")
+    if (!ClientBuild::Platform::IsValid(logonRequest->platform()))
     {
-        TC_LOG_DEBUG("session", "[Battlenet::LogonRequest] %s attempted to log in from an unsupported platform (using %s)!", GetClientInfo().c_str(), logonRequest->platform().c_str());
+        TC_LOG_DEBUG("session", "[Battlenet::LogonRequest] {} attempted to log in from an unsupported platform (using {})!", GetClientInfo(), logonRequest->platform());
         return ERROR_BAD_PLATFORM;
     }
 
     if (!IsValidLocale(GetLocaleByName(logonRequest->locale())))
     {
-        TC_LOG_DEBUG("session", "[Battlenet::LogonRequest] %s attempted to log in with unsupported locale (using %s)!", GetClientInfo().c_str(), logonRequest->locale().c_str());
+        TC_LOG_DEBUG("session", "[Battlenet::LogonRequest] {} attempted to log in with unsupported locale (using {})!", GetClientInfo(), logonRequest->locale());
         return ERROR_BAD_LOCALE;
     }
 
@@ -229,14 +222,33 @@ uint32 Battlenet::Session::HandleLogon(authentication::v1::LogonRequest const* l
     _os = logonRequest->platform();
     _build = logonRequest->application_version();
 
+    _timezoneOffset = [&]
+    {
+        if (!logonRequest->has_device_id())
+            return 0min;
+
+        rapidjson::Document doc;
+        doc.Parse(logonRequest->device_id().c_str(), logonRequest->device_id().length());
+        if (doc.HasParseError())
+            return 0min;
+
+        auto itr = doc.FindMember("UTCO");
+        if (itr == doc.MemberEnd())
+            return 0min;
+
+        if (!itr->value.IsUint())
+            return 0min;
+
+        return Trinity::Timezone::GetOffsetByHash(itr->value.GetUint());
+    }();
+
     if (logonRequest->has_cached_web_credentials())
         return VerifyWebCredentials(logonRequest->cached_web_credentials(), continuation);
 
-    boost::asio::ip::tcp::endpoint const& endpoint = sLoginService.GetAddressForClient(GetRemoteIpAddress());
-
     challenge::v1::ChallengeExternalRequest externalChallenge;
     externalChallenge.set_payload_type("web_auth_url");
-    externalChallenge.set_payload(Trinity::StringFormat("https://%s:%u/bnetserver/login/", endpoint.address().to_string().c_str(), endpoint.port()));
+    externalChallenge.set_payload(Trinity::StringFormat("http{}://{}:{}/bnetserver/login/", !SslContext::UsesDevWildcardCertificate() ? "s" : "",
+        sLoginService.GetHostnameForClient(_socket->GetRemoteIpAddress()), sLoginService.GetPort()));
     Service<challenge::v1::ChallengeListener>(this).OnExternalChallenge(&externalChallenge);
     return ERROR_OK;
 }
@@ -254,20 +266,26 @@ uint32 Battlenet::Session::HandleGenerateWebCredentials(authentication::v1::Gene
     if (!_authed)
         return ERROR_DENIED;
 
-    if (request->program() != 0x576F57)
+    switch (request->program())
     {
-        auto asPrintable = [](char c) { return std::isprint(c) ? c : ' '; };
+        case 0x417070: // App
+        case 0x576F57: // WoW
+            break;
+        default:
+        {
+            auto asPrintable = [](char c) { return std::isprint(c) ? c : ' '; };
 
-        TC_LOG_DEBUG("session", "[Battlenet::HandleGenerateWebCredentials] %s attempted to generate web cretentials with game other than WoW (using %c%c%c%c)!",
-            GetClientInfo().c_str(), asPrintable((request->program() >> 24) & 0xFF), asPrintable((request->program() >> 16) & 0xFF),
-            asPrintable((request->program() >> 8) & 0xFF), asPrintable(request->program() & 0xFF));
-        return ERROR_BAD_PROGRAM;
+            TC_LOG_DEBUG("session", "[Battlenet::HandleGenerateWebCredentials] {} attempted to generate web cretentials with game other than WoW (using {}{}{}{})!",
+                GetClientInfo(), asPrintable((request->program() >> 24) & 0xFF), asPrintable((request->program() >> 16) & 0xFF),
+                asPrintable((request->program() >> 8) & 0xFF), asPrintable(request->program() & 0xFF));
+            return ERROR_BAD_PROGRAM;
+        }
     }
 
     LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_BNET_EXISTING_AUTHENTICATION_BY_ID);
     stmt->setUInt32(0, _accountInfo->Id);
 
-    _queryProcessor.AddCallback(LoginDatabase.AsyncQuery(stmt).WithPreparedCallback([this, asyncContinuation = std::move(continuation)](PreparedQueryResult result)
+    QueueQuery(LoginDatabase.AsyncQuery(stmt).WithPreparedCallback([this, asyncContinuation = std::move(continuation)](PreparedQueryResult result)
     {
         // just send existing credentials back (not the best but it works for now with them being stored in db)
         Battlenet::Services::Authentication asyncContinuationService(this);
@@ -289,7 +307,7 @@ uint32 Battlenet::Session::VerifyWebCredentials(std::string const& webCredential
 
     std::function<void(ServiceBase*, uint32, ::google::protobuf::Message const*)> asyncContinuation = std::move(continuation);
     std::shared_ptr<AccountInfo> accountInfo = std::make_shared<AccountInfo>();
-    _queryProcessor.AddCallback(LoginDatabase.AsyncQuery(stmt).WithChainingPreparedCallback([this, accountInfo, asyncContinuation](QueryCallback& callback, PreparedQueryResult result)
+    QueueQuery(LoginDatabase.AsyncQuery(stmt).WithChainingPreparedCallback([this, accountInfo, asyncContinuation](QueryCallback& callback, PreparedQueryResult result)
     {
         Battlenet::Services::Authentication asyncContinuationService(this);
         NoData response;
@@ -351,13 +369,13 @@ uint32 Battlenet::Session::VerifyWebCredentials(std::string const& webCredential
         Battlenet::Services::Authentication asyncContinuationService(this);
         NoData response;
 
-        std::string ip_address = GetRemoteIpAddress().to_string();
+        std::string ip_address = _socket->GetRemoteIpAddress().to_string();
 
         // If the IP is 'locked', check that the player comes indeed from the correct IP address
         if (_accountInfo->IsLockedToIP)
         {
-            TC_LOG_DEBUG("session", "[Session::HandleVerifyWebCredentials] Account '%s' is locked to IP - '%s' is logging in from '%s'",
-                _accountInfo->Login.c_str(), _accountInfo->LastIP.c_str(), ip_address.c_str());
+            TC_LOG_DEBUG("session", "[Session::HandleVerifyWebCredentials] Account '{}' is locked to IP - '{}' is logging in from '{}'",
+                _accountInfo->Login, _accountInfo->LastIP, ip_address);
 
             if (_accountInfo->LastIP != ip_address)
             {
@@ -370,13 +388,13 @@ uint32 Battlenet::Session::VerifyWebCredentials(std::string const& webCredential
             if (IpLocationRecord const* location = sIPLocation->GetLocationRecord(ip_address))
                 _ipCountry = location->CountryCode;
 
-            TC_LOG_DEBUG("session", "[Session::HandleVerifyWebCredentials] Account '%s' is not locked to ip", _accountInfo->Login.c_str());
+            TC_LOG_DEBUG("session", "[Session::HandleVerifyWebCredentials] Account '{}' is not locked to ip", _accountInfo->Login);
             if (_accountInfo->LockCountry.empty() || _accountInfo->LockCountry == "00")
-                TC_LOG_DEBUG("session", "[Session::HandleVerifyWebCredentials] Account '%s' is not locked to country", _accountInfo->Login.c_str());
+                TC_LOG_DEBUG("session", "[Session::HandleVerifyWebCredentials] Account '{}' is not locked to country", _accountInfo->Login);
             else if (!_accountInfo->LockCountry.empty() && !_ipCountry.empty())
             {
-                TC_LOG_DEBUG("session", "[Session::HandleVerifyWebCredentials] Account '%s' is locked to country: '%s' Player country is '%s'",
-                    _accountInfo->Login.c_str(), _accountInfo->LockCountry.c_str(), _ipCountry.c_str());
+                TC_LOG_DEBUG("session", "[Session::HandleVerifyWebCredentials] Account '{}' is locked to country: '{}' Player country is '{}'",
+                    _accountInfo->Login, _accountInfo->LockCountry, _ipCountry);
 
                 if (_ipCountry != _accountInfo->LockCountry)
                 {
@@ -391,13 +409,13 @@ uint32 Battlenet::Session::VerifyWebCredentials(std::string const& webCredential
         {
             if (_accountInfo->IsPermanenetlyBanned)
             {
-                TC_LOG_DEBUG("session", "%s [Session::HandleVerifyWebCredentials] Banned account %s tried to login!", GetClientInfo().c_str(), _accountInfo->Login.c_str());
+                TC_LOG_DEBUG("session", "{} [Session::HandleVerifyWebCredentials] Banned account {} tried to login!", GetClientInfo(), _accountInfo->Login);
                 asyncContinuation(&asyncContinuationService, ERROR_GAME_ACCOUNT_BANNED, &response);
                 return;
             }
             else
             {
-                TC_LOG_DEBUG("session", "%s [Session::HandleVerifyWebCredentials] Temporarily banned account %s tried to login!", GetClientInfo().c_str(), _accountInfo->Login.c_str());
+                TC_LOG_DEBUG("session", "{} [Session::HandleVerifyWebCredentials] Temporarily banned account {} tried to login!", GetClientInfo(), _accountInfo->Login);
                 asyncContinuation(&asyncContinuationService, ERROR_GAME_ACCOUNT_SUSPENDED, &response);
                 return;
             }
@@ -407,10 +425,10 @@ uint32 Battlenet::Session::VerifyWebCredentials(std::string const& webCredential
         logonResult.set_error_code(0);
         logonResult.mutable_account_id()->set_low(_accountInfo->Id);
         logonResult.mutable_account_id()->set_high(UI64LIT(0x100000000000000));
-        for (auto itr = _accountInfo->GameAccounts.begin(); itr != _accountInfo->GameAccounts.end(); ++itr)
+        for (auto const& [id, gameAccountInfo] : accountInfo->GameAccounts)
         {
             EntityId* gameAccountId = logonResult.add_game_account_id();
-            gameAccountId->set_low(itr->second.Id);
+            gameAccountId->set_low(gameAccountInfo.Id);
             gameAccountId->set_high(UI64LIT(0x200000200576F57));
         }
 
@@ -518,29 +536,23 @@ uint32 Battlenet::Session::HandleProcessClientRequest(game_utilities::v1::Client
 
     if (!command)
     {
-        TC_LOG_ERROR("session.rpc", "%s sent ClientRequest with no command.", GetClientInfo().c_str());
+        TC_LOG_ERROR("session.rpc", "{} sent ClientRequest with no command.", GetClientInfo());
         return ERROR_RPC_MALFORMED_REQUEST;
     }
 
     auto itr = ClientRequestHandlers.find(removeSuffix(command->name()));
     if (itr == ClientRequestHandlers.end())
     {
-        TC_LOG_ERROR("session.rpc", "%s sent ClientRequest with unknown command %s.", GetClientInfo().c_str(), removeSuffix(command->name()).c_str());
+        TC_LOG_ERROR("session.rpc", "{} sent ClientRequest with unknown command {}.", GetClientInfo(), removeSuffix(command->name()));
         return ERROR_RPC_NOT_IMPLEMENTED;
     }
 
     return (this->*itr->second)(params, response);
 }
 
-static Variant const* GetParam(std::unordered_map<std::string, Variant const*> const& params, char const* paramName)
-{
-    auto itr = params.find(paramName);
-    return itr != params.end() ? itr->second : nullptr;
-}
-
 uint32 Battlenet::Session::GetRealmListTicket(std::unordered_map<std::string, Variant const*> const& params, game_utilities::v1::ClientResponse* response)
 {
-    if (Variant const* identity = GetParam(params, "Param_Identity"))
+    if (Variant const* identity = Trinity::Containers::MapGetValuePtr(params, "Param_Identity"))
     {
         ::JSON::RealmList::RealmListTicketIdentity data;
         std::size_t jsonStart = identity->blob_value().find(':');
@@ -561,7 +573,7 @@ uint32 Battlenet::Session::GetRealmListTicket(std::unordered_map<std::string, Va
         return ERROR_GAME_ACCOUNT_SUSPENDED;
 
     bool clientInfoOk = false;
-    if (Variant const* clientInfo = GetParam(params, "Param_ClientInfo"))
+    if (Variant const* clientInfo = Trinity::Containers::MapGetValuePtr(params, "Param_ClientInfo"))
     {
         ::JSON::RealmList::RealmListTicketClientInformation data;
         std::size_t jsonStart = clientInfo->blob_value().find(':');
@@ -572,6 +584,8 @@ uint32 Battlenet::Session::GetRealmListTicket(std::unordered_map<std::string, Va
                 clientInfoOk = true;
                 memcpy(_clientSecret.data(), data.info().secret().data(), _clientSecret.size());
             }
+
+            _clientInfo = { .Platform = data.info().platformtype(), .Arch = data.info().clientarch(), .Type = data.info().type() };
         }
     }
 
@@ -579,7 +593,7 @@ uint32 Battlenet::Session::GetRealmListTicket(std::unordered_map<std::string, Va
         return ERROR_WOW_SERVICES_DENIED_REALM_LIST_TICKET;
 
     LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_UPD_BNET_LAST_LOGIN_INFO);
-    stmt->setString(0, GetRemoteIpAddress().to_string());
+    stmt->setString(0, _socket->GetRemoteIpAddress().to_string());
     stmt->setUInt8(1, GetLocaleByName(_locale));
     stmt->setString(2, _os);
     stmt->setUInt32(3, _accountInfo->Id);
@@ -595,12 +609,12 @@ uint32 Battlenet::Session::GetRealmListTicket(std::unordered_map<std::string, Va
 
 uint32 Battlenet::Session::GetLastCharPlayed(std::unordered_map<std::string, Variant const*> const& params, game_utilities::v1::ClientResponse* response)
 {
-    if (Variant const* subRegion = GetParam(params, "Command_LastCharPlayedRequest_v1"))
+    if (Variant const* subRegion = Trinity::Containers::MapGetValuePtr(params, "Command_LastCharPlayedRequest_v1"))
     {
         auto lastPlayerChar = _gameAccountInfo->LastPlayedCharacters.find(subRegion->string_value());
         if (lastPlayerChar != _gameAccountInfo->LastPlayedCharacters.end())
         {
-            std::vector<uint8> compressed = sRealmList->GetRealmEntryJSON(lastPlayerChar->second.RealmId, _build);
+            std::vector<uint8> compressed = sRealmList->GetRealmEntryJSON(lastPlayerChar->second.RealmId, _build, _gameAccountInfo->SecurityLevel);
 
             if (compressed.empty())
                 return ERROR_UTIL_SERVER_FAILED_TO_SERIALIZE_RESPONSE;
@@ -634,10 +648,10 @@ uint32 Battlenet::Session::GetRealmList(std::unordered_map<std::string, Variant 
         return ERROR_USER_SERVER_BAD_WOW_ACCOUNT;
 
     std::string subRegionId;
-    if (Variant const* subRegion = GetParam(params, "Command_RealmListRequest_v1"))
+    if (Variant const* subRegion = Trinity::Containers::MapGetValuePtr(params, "Command_RealmListRequest_v1"))
         subRegionId = subRegion->string_value();
 
-    std::vector<uint8> compressed = sRealmList->GetRealmList(_build, subRegionId);
+    std::vector<uint8> compressed = sRealmList->GetRealmList(_build, _gameAccountInfo->SecurityLevel, subRegionId);
 
     if (compressed.empty())
         return ERROR_UTIL_SERVER_FAILED_TO_SERIALIZE_RESPONSE;
@@ -671,8 +685,9 @@ uint32 Battlenet::Session::GetRealmList(std::unordered_map<std::string, Variant 
 
 uint32 Battlenet::Session::JoinRealm(std::unordered_map<std::string, Variant const*> const& params, game_utilities::v1::ClientResponse* response)
 {
-    if (Variant const* realmAddress = GetParam(params, "Param_RealmAddress"))
-        return sRealmList->JoinRealm(realmAddress->uint_value(), _build, GetRemoteIpAddress(), _clientSecret, GetLocaleByName(_locale), _os, _gameAccountInfo->Name, response);
+    if (Variant const* realmAddress = Trinity::Containers::MapGetValuePtr(params, "Param_RealmAddress"))
+        return sRealmList->JoinRealm(realmAddress->uint_value(), _build, _clientInfo, _socket->GetRemoteIpAddress(), _clientSecret, GetLocaleByName(_locale),
+            _os, _timezoneOffset, _gameAccountInfo->Name, _gameAccountInfo->SecurityLevel, response);
 
     return ERROR_WOW_SERVICES_INVALID_JOIN_TICKET;
 }
@@ -691,20 +706,8 @@ uint32 Battlenet::Session::HandleGetAllValuesForAttribute(game_utilities::v1::Ge
     return ERROR_RPC_NOT_IMPLEMENTED;
 }
 
-void Battlenet::Session::HandshakeHandler(boost::system::error_code const& error)
-{
-    if (error)
-    {
-        TC_LOG_ERROR("session", "%s SSL Handshake failed %s", GetClientInfo().c_str(), error.message().c_str());
-        CloseSocket();
-        return;
-    }
-
-    AsyncRead();
-}
-
 template<bool(Battlenet::Session::*processMethod)(), MessageBuffer Battlenet::Session::*outputBuffer>
-inline bool PartialProcessPacket(Battlenet::Session* session, MessageBuffer& inputBuffer)
+static inline Optional<Trinity::Net::SocketReadCallbackResult> PartialProcessPacket(Battlenet::Session* session, MessageBuffer& inputBuffer)
 {
     MessageBuffer& buffer = session->*outputBuffer;
 
@@ -716,46 +719,45 @@ inline bool PartialProcessPacket(Battlenet::Session* session, MessageBuffer& inp
         buffer.Write(inputBuffer.GetReadPointer(), readDataSize);
         inputBuffer.ReadCompleted(readDataSize);
     }
+    else
+        return { }; // go to next buffer
 
     if (buffer.GetRemainingSpace() > 0)
     {
         // Couldn't receive the whole data this time.
         ASSERT(inputBuffer.GetActiveSize() == 0);
-        return false;
+        return Trinity::Net::SocketReadCallbackResult::KeepReading;
     }
 
     // just received fresh new payload
     if (!(session->*processMethod)())
     {
         session->CloseSocket();
-        return false;
+        return Trinity::Net::SocketReadCallbackResult::Stop;
     }
 
-    return true;
+    return { }; // go to next buffer
 }
 
-void Battlenet::Session::ReadHandler()
+Trinity::Net::SocketReadCallbackResult Battlenet::Session::ReadHandler()
 {
-    if (!IsOpen())
-        return;
-
-    MessageBuffer& packet = GetReadBuffer();
+    MessageBuffer& packet = _socket->GetReadBuffer();
     while (packet.GetActiveSize() > 0)
     {
-        if (!PartialProcessPacket<&Battlenet::Session::ReadHeaderLengthHandler, &Battlenet::Session::_headerLengthBuffer>(this, packet))
-            break;
+        if (Optional<Trinity::Net::SocketReadCallbackResult> partialResult = PartialProcessPacket<&Session::ReadHeaderLengthHandler, &Session::_headerLengthBuffer>(this, packet))
+            return *partialResult;
 
-        if (!PartialProcessPacket<&Battlenet::Session::ReadHeaderHandler, &Battlenet::Session::_headerBuffer>(this, packet))
-            break;
+        if (Optional<Trinity::Net::SocketReadCallbackResult> partialResult = PartialProcessPacket<&Session::ReadHeaderHandler, &Session::_headerBuffer>(this, packet))
+            return *partialResult;
 
-        if (!PartialProcessPacket<&Battlenet::Session::ReadDataHandler, &Battlenet::Session::_packetBuffer>(this, packet))
-            break;
+        if (Optional<Trinity::Net::SocketReadCallbackResult> partialResult = PartialProcessPacket<&Session::ReadDataHandler, &Session::_packetBuffer>(this, packet))
+            return *partialResult;
 
         _headerLengthBuffer.Reset();
         _headerBuffer.Reset();
     }
 
-    AsyncRead();
+    return Trinity::Net::SocketReadCallbackResult::KeepReading;
 }
 
 bool Battlenet::Session::ReadHeaderLengthHandler()
@@ -804,7 +806,7 @@ bool Battlenet::Session::ReadDataHandler()
 std::string Battlenet::Session::GetClientInfo() const
 {
     std::ostringstream stream;
-    stream << '[' << GetRemoteIpAddress() << ':' << GetRemotePort();
+    stream << '[' << _socket->GetRemoteIpAddress() << ':' << _socket->GetRemotePort();
     if (_accountInfo && !_accountInfo->Login.empty())
         stream << ", Account: " << _accountInfo->Login;
 
@@ -813,5 +815,5 @@ std::string Battlenet::Session::GetClientInfo() const
 
     stream << ']';
 
-    return stream.str();
+    return std::move(stream).str();
 }

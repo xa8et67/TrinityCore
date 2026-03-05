@@ -139,7 +139,7 @@ struct boss_felmyst : public BossAI
                 me->Relocate(madrigosa);
 
         me->SetDisplayFromModel(0);
-        me->SetNativeDisplayId(me->GetDisplayId());
+        me->SetDisplayId(me->GetDisplayId(), true);
     }
 
     void Reset() override
@@ -276,6 +276,7 @@ struct boss_felmyst : public BossAI
                 break;
         }
         phase = NextPhase;
+        me->SetCanMelee(phase == PHASE_GROUND);
     }
 
     void HandleFlightSequence()
@@ -301,7 +302,7 @@ struct boss_felmyst : public BossAI
 
                 if (!target)
                 {
-                    EnterEvadeMode(EVADE_REASON_NO_HOSTILES);
+                    EnterEvadeMode(EvadeReason::NoHostiles);
                     return;
                 }
 
@@ -327,7 +328,7 @@ struct boss_felmyst : public BossAI
 
                 if (!target)
                 {
-                    EnterEvadeMode(EVADE_REASON_NO_HOSTILES);
+                    EnterEvadeMode(EvadeReason::NoHostiles);
                     return;
                 }
 
@@ -356,7 +357,7 @@ struct boss_felmyst : public BossAI
 
                 if (!target)
                 {
-                    EnterEvadeMode(EVADE_REASON_NO_HOSTILES);
+                    EnterEvadeMode(EvadeReason::NoHostiles);
                     return;
                 }
 
@@ -396,7 +397,7 @@ struct boss_felmyst : public BossAI
                     DoStartMovement(target);
                 else
                 {
-                    EnterEvadeMode(EVADE_REASON_NO_HOSTILES);
+                    EnterEvadeMode(EvadeReason::NoHostiles);
                     return;
                 }
                 break;
@@ -415,7 +416,7 @@ struct boss_felmyst : public BossAI
         if (!UpdateVictim())
         {
             if (phase == PHASE_FLIGHT && !me->IsInEvadeMode())
-                EnterEvadeMode(EVADE_REASON_NO_HOSTILES);
+                EnterEvadeMode(EvadeReason::NoHostiles);
             return;
         }
 
@@ -454,7 +455,6 @@ struct boss_felmyst : public BossAI
                     EnterPhase(PHASE_FLIGHT);
                     break;
                 default:
-                    DoMeleeAttackIfReady();
                     break;
             }
         }

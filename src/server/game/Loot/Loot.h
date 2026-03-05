@@ -23,6 +23,7 @@
 #include "Define.h"
 #include "Duration.h"
 #include "ItemEnchantmentMgr.h"
+#include "LootItemType.h"
 #include "ObjectGuid.h"
 #include "Optional.h"
 #include "SharedDefines.h"
@@ -56,7 +57,8 @@ enum RollType
     ROLL_NEED         = 1,
     ROLL_GREED        = 2,
     ROLL_DISENCHANT   = 3,
-    MAX_ROLL_TYPE     = 4
+    ROLL_TRANSMOG     = 4,
+    MAX_ROLL_TYPE     = 5
 };
 
 enum class RollVote
@@ -75,6 +77,7 @@ enum RollMask
     ROLL_FLAG_TYPE_NEED         = 0x02,
     ROLL_FLAG_TYPE_GREED        = 0x04,
     ROLL_FLAG_TYPE_DISENCHANT   = 0x08,
+    ROLL_FLAG_TYPE_TRANSMOG     = 0x10,
 
     ROLL_ALL_TYPE_NO_DISENCHANT = 0x07,
     ROLL_ALL_TYPE_MASK          = 0x0F
@@ -172,30 +175,30 @@ enum class LootRollIneligibilityReason : uint32
 
 struct TC_GAME_API LootItem
 {
-    uint32  itemid;
-    uint32  LootListId;
-    ItemRandomBonusListId randomBonusListId;
+    uint32  itemid = 0;
+    uint32  LootListId = 0;
+    ItemRandomBonusListId randomBonusListId = 0;
     std::vector<int32> BonusListIDs;
-    ItemContext context;
-    ConditionContainer conditions;                          // additional loot condition
+    ItemContext context = ItemContext::NONE;
+    ConditionsReference conditions;                         // additional loot condition
     GuidSet allowedGUIDs;
     ObjectGuid rollWinnerGUID;                              // Stores the guid of person who won loot, if his bags are full only he can see the item in loot list!
-    uint8   count             : 8;
-    bool    is_looted         : 1;
-    bool    is_blocked        : 1;
-    bool    freeforall        : 1;                          // free for all
-    bool    is_underthreshold : 1;
-    bool    is_counted        : 1;
-    bool    needs_quest       : 1;                          // quest drop
-    bool    follow_loot_rules : 1;
+    uint32  count = 0;
+    LootItemType type = LootItemType::Item;
+    bool    is_looted         : 1 = false;
+    bool    is_blocked        : 1 = false;
+    bool    freeforall        : 1 = false;                  // free for all
+    bool    is_underthreshold : 1 = false;
+    bool    is_counted        : 1 = false;
+    bool    needs_quest       : 1 = false;                  // quest drop
+    bool    follow_loot_rules : 1 = false;
 
     // Constructor, copies most fields from LootStoreItem, generates random count and random suffixes/properties
-    // Should be called for non-reference LootStoreItem entries only (reference = 0)
+    // Should be called for non-reference LootStoreItem entries only
     explicit LootItem(LootStoreItem const& li);
 
     // Empty constructor for creating an empty LootItem to be filled in with DB data
-    LootItem() : itemid(0), LootListId(0), randomBonusListId(0), context(ItemContext::NONE), count(0), is_looted(false), is_blocked(false),
-                 freeforall(false), is_underthreshold(false), is_counted(false), needs_quest(false), follow_loot_rules(false) { }
+    LootItem() = default;
 
     LootItem(LootItem const&);
     LootItem(LootItem&&) noexcept;
@@ -205,8 +208,11 @@ struct TC_GAME_API LootItem
 
     // Basic checks for player/item compatibility - if false no chance to see the item in the loot - used only for loot generation
     bool AllowedForPlayer(Player const* player, Loot const* loot) const;
-    static bool AllowedForPlayer(Player const* player, Loot const* loot, uint32 itemid, bool needs_quest, bool follow_loot_rules, bool strictUsabilityCheck,
-        ConditionContainer const& conditions);
+    static bool AllowedForPlayer(Player const* player, LootStoreItem const& lootStoreItem, bool strictUsabilityCheck);
+    static bool ItemAllowedForPlayer(Player const* player, Loot const* loot, uint32 itemid, bool needs_quest, bool follow_loot_rules, bool strictUsabilityCheck,
+        ConditionsReference const& conditions);
+    static bool CurrencyAllowedForPlayer(Player const* player, uint32 currencyId, bool needs_quest, ConditionsReference const& conditions);
+    static bool TrackingQuestAllowedForPlayer(Player const* player, uint32 questId, ConditionsReference const& conditions);
     void AddAllowedLooter(Player const* player);
     GuidSet const& GetAllowedLooters() const { return allowedGUIDs; }
     bool HasAllowedLooter(ObjectGuid const& looter) const;
@@ -265,7 +271,8 @@ private:
     void FillPacket(WorldPackets::Loot::LootItemData& lootItem) const;
     void Finish(RollVoteMap::const_iterator winnerItr);
     bool AllPlayerVoted(RollVoteMap::const_iterator& winnerItr);
-    ItemDisenchantLootEntry const* GetItemDisenchantLoot() const;
+    Optional<uint32> GetItemDisenchantLootId() const;
+    Optional<uint16> GetItemDisenchantSkillRequired() const;
     Map*        m_map;
     RollVoteMap m_rollVoteMap;
     bool        m_isStarted;
@@ -303,11 +310,12 @@ struct TC_GAME_API Loot
     void SetDungeonEncounterId(uint32 dungeonEncounterId) { _dungeonEncounterId = dungeonEncounterId; }
 
     bool isLooted() const { return gold == 0 && unlootedCount == 0; }
+    bool IsChanged() const { return _changed; }
 
     void NotifyLootList(Map const* map) const;
     void NotifyItemRemoved(uint8 lootListId, Map const* map);
     void NotifyMoneyRemoved(Map const* map);
-    void OnLootOpened(Map* map, ObjectGuid looter);
+    void OnLootOpened(Map* map, Player* looter);
     void AddLooter(ObjectGuid GUID) { PlayersLooting.insert(GUID); }
     void RemoveLooter(ObjectGuid GUID) { PlayersLooting.erase(GUID); }
 
@@ -315,13 +323,15 @@ struct TC_GAME_API Loot
 
     void generateMoneyLoot(uint32 minAmount, uint32 maxAmount);
     bool FillLoot(uint32 lootId, LootStore const& store, Player* lootOwner, bool personal, bool noEmptyError = false, uint16 lootMode = LOOT_MODE_DEFAULT, ItemContext context = ItemContext::NONE);
-    void FillNotNormalLootFor(Player const* player);        // count unlooted items
+    void FillNotNormalLootFor(Player* player);        // count unlooted items
 
     // Inserts the item into the loot (called by LootTemplate processors)
     void AddItem(LootStoreItem const& item);
 
     bool AutoStore(Player* player, uint8 bag, uint8 slot, bool broadcast = false, bool createdByPlayer = false);
+    void AutoStoreTrackingQuests(Player* player, NotNormalLootItemList& ffaItems);
 
+    void LootMoney();
     LootItem const* GetItemInSlot(uint32 lootListId) const;
     LootItem* LootItemInSlot(uint32 lootListId, Player const* player, NotNormalLootItem** ffaItem = nullptr);
     bool hasItemForAll() const;
@@ -346,6 +356,7 @@ private:
     ObjectGuid _lootMaster;
     GuidUnorderedSet _allowedLooters;
     bool _wasOpened;                                                // true if at least one player received the loot content
+    bool _changed;
     uint32 _dungeonEncounterId;
 };
 

@@ -17,7 +17,9 @@
 
 #include "ScriptMgr.h"
 #include "CellImpl.h"
+#include "CharmInfo.h"
 #include "CombatAI.h"
+#include "Containers.h"
 #include "CreatureTextMgr.h"
 #include "GameEventMgr.h"
 #include "GameObject.h"
@@ -250,8 +252,7 @@ public:
                     ResetFlagTimer -= diff;
             }
 
-            if (UpdateVictim())
-                DoMeleeAttackIfReady();
+            UpdateVictim();
         }
 
         void ReceiveEmote(Player* player, uint32 emote) override
@@ -636,7 +637,7 @@ public:
         void Reset() override
         {
             Initialize();
-            me->RemoveUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
+            me->SetUninteractible(false);
         }
 
         void BeginEvent(Player* player)
@@ -661,7 +662,7 @@ public:
             }
 
             Event = true;
-            me->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
+            me->SetUninteractible(true);
         }
 
         void PatientDied(Position const* point)
@@ -769,7 +770,7 @@ public:
             Initialize();
 
             //no select
-            me->RemoveUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
+            me->SetUninteractible(false);
 
             //no regen health
             me->SetUnitFlag(UNIT_FLAG_IN_COMBAT);
@@ -810,7 +811,7 @@ public:
                         ENSURE_AI(npc_doctor::npc_doctorAI, doctor->AI())->PatientSaved(me, player, Coord);
 
             //make uninteractible
-            me->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
+            me->SetUninteractible(true);
 
             //regen health
             me->RemoveUnitFlag(UNIT_FLAG_IN_COMBAT);
@@ -847,7 +848,7 @@ public:
             if (me->IsAlive() && me->GetHealth() <= 6)
             {
                 me->RemoveUnitFlag(UNIT_FLAG_IN_COMBAT);
-                me->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
+                me->SetUninteractible(true);
                 me->setDeathState(JUST_DIED);
                 me->SetUnitFlag3(UNIT_FLAG3_FAKE_DEAD);
 
@@ -1004,7 +1005,7 @@ public:
 
             me->SetStandState(UNIT_STAND_STATE_KNEEL);
             // expect database to have RegenHealth=0
-            me->SetHealth(me->CountPctFromMaxHealth(70));
+            me->SetSpawnHealth();
         }
 
         void JustEngagedWith(Unit* /*who*/) override { }
@@ -1065,10 +1066,11 @@ public:
                                 break;
                         }
 
-                        Start(false, true);
+                        LoadPath((me->GetEntry() << 3) | 2);
+                        Start(false);
                     }
                     else
-                        EnterEvadeMode();                       //something went wrong
+                        EnterEvadeMode(EvadeReason::Other);                       //something went wrong
 
                     RunAwayTimer = 30000;
                 }
@@ -1868,7 +1870,6 @@ enum TrainWrecker
     SPELL_TOY_TRAIN_PULSE =  61551,
     SPELL_WRECK_TRAIN     =  62943,
     EVENT_DO_JUMP         =      1,
-    EVENT_DO_FACING       =      2,
     EVENT_DO_WRECK        =      3,
     EVENT_DO_DANCE        =      4,
     MOVEID_CHASE          =      1,
@@ -1906,8 +1907,8 @@ class npc_train_wrecker : public CreatureScript
                         {
                             _isSearching = false;
                             _target = target->GetGUID();
-                            me->SetWalk(true);
-                            me->GetMotionMaster()->MovePoint(MOVEID_CHASE, target->GetNearPosition(3.0f, target->GetAbsoluteAngle(me)));
+                            me->GetMotionMaster()->MovePoint(MOVEID_CHASE, target->GetNearPosition(1.0f, target->GetAbsoluteAngle(me)),
+                                true, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
                         }
                         else
                             _timer = 3 * IN_MILLISECONDS;
@@ -1919,34 +1920,13 @@ class npc_train_wrecker : public CreatureScript
                     {
                         case EVENT_DO_JUMP:
                             if (GameObject* target = VerifyTarget())
-                                me->GetMotionMaster()->MoveJump(*target, 5.0, 10.0, MOVEID_JUMP);
+                                me->GetMotionMaster()->MoveJump(MOVEID_JUMP, *target, 3.0f, 1.0f);
                             _nextAction = 0;
                             break;
-                        case EVENT_DO_FACING:
-                            if (GameObject* target = VerifyTarget())
-                            {
-                                me->SetFacingTo(target->GetOrientation());
-                                me->HandleEmoteCommand(EMOTE_ONESHOT_ATTACK1H);
-                                _timer = 1.5 * IN_MILLISECONDS;
-                                _nextAction = EVENT_DO_WRECK;
-                            }
-                            else
-                                _nextAction = 0;
-                            break;
                         case EVENT_DO_WRECK:
-                            if (diff < _timer)
-                            {
-                                _timer -= diff;
-                                break;
-                            }
+                            _nextAction = 0;
                             if (GameObject* target = VerifyTarget())
-                            {
                                 me->CastSpell(target, SPELL_WRECK_TRAIN, false);
-                                _timer = 2 * IN_MILLISECONDS;
-                                _nextAction = EVENT_DO_DANCE;
-                            }
-                            else
-                                _nextAction = 0;
                             break;
                         case EVENT_DO_DANCE:
                             if (diff < _timer)
@@ -1954,8 +1934,7 @@ class npc_train_wrecker : public CreatureScript
                                 _timer -= diff;
                                 break;
                             }
-                            me->UpdateEntry(NPC_EXULTING_WIND_UP_TRAIN_WRECKER);
-                            me->SetEmoteState(EMOTE_ONESHOT_DANCE);
+                            me->SetEmoteState(EMOTE_STATE_DANCE);
                             me->DespawnOrUnsummon(5s);
                             _nextAction = 0;
                             break;
@@ -1970,7 +1949,17 @@ class npc_train_wrecker : public CreatureScript
                 if (id == MOVEID_CHASE)
                     _nextAction = EVENT_DO_JUMP;
                 else if (id == MOVEID_JUMP)
-                    _nextAction = EVENT_DO_FACING;
+                    _nextAction = EVENT_DO_WRECK;
+            }
+
+            void SpellHitTarget(WorldObject*, SpellInfo const* spellInfo) override
+            {
+                if (spellInfo->Id == SPELL_WRECK_TRAIN)
+                {
+                    me->UpdateEntry(NPC_EXULTING_WIND_UP_TRAIN_WRECKER);
+                    _timer = 4 * IN_MILLISECONDS;
+                    _nextAction = EVENT_DO_DANCE;
+                }
             }
 
         private:
@@ -2067,12 +2056,14 @@ public:
 
                 if (owner->HasAchieved(ACHIEVEMENT_PONY_UP) && !me->HasAura(SPELL_AURA_TIRED_S) && !me->HasAura(SPELL_AURA_TIRED_G))
                 {
-                    me->SetNpcFlag(UNIT_NPC_FLAG_BANKER | UNIT_NPC_FLAG_MAILBOX | UNIT_NPC_FLAG_VENDOR);
+                    me->SetVendor(UNIT_NPC_FLAG_VENDOR, true);
+                    me->SetNpcFlag(UNIT_NPC_FLAG_BANKER | UNIT_NPC_FLAG_MAILBOX);
                     return;
                 }
             }
 
-            me->RemoveNpcFlag(UNIT_NPC_FLAG_BANKER | UNIT_NPC_FLAG_MAILBOX | UNIT_NPC_FLAG_VENDOR);
+            me->SetVendor(UNIT_NPC_FLAG_VENDOR_MASK, false);
+            me->RemoveNpcFlag(UNIT_NPC_FLAG_BANKER | UNIT_NPC_FLAG_MAILBOX);
         }
 
         bool OnGossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
@@ -2081,7 +2072,8 @@ public:
             {
                 case GOSSIP_OPTION_BANK:
                 {
-                    me->RemoveNpcFlag(UNIT_NPC_FLAG_MAILBOX | UNIT_NPC_FLAG_VENDOR);
+                    me->SetVendor(UNIT_NPC_FLAG_VENDOR_MASK, false);
+                    me->RemoveNpcFlag(UNIT_NPC_FLAG_MAILBOX);
                     uint32 _bankAura = IsArgentSquire() ? SPELL_AURA_BANK_S : SPELL_AURA_BANK_G;
                     if (!me->HasAura(_bankAura))
                         DoCastSelf(_bankAura);
@@ -2103,7 +2095,8 @@ public:
                 }
                 case GOSSIP_OPTION_MAIL:
                 {
-                    me->RemoveNpcFlag(UNIT_NPC_FLAG_BANKER | UNIT_NPC_FLAG_VENDOR);
+                    me->SetVendor(UNIT_NPC_FLAG_VENDOR_MASK, false);
+                    me->RemoveNpcFlag(UNIT_NPC_FLAG_BANKER);
                     uint32 _mailAura = IsArgentSquire() ? SPELL_AURA_POSTMAN_S : SPELL_AURA_POSTMAN_G;
                     if (!me->HasAura(_mailAura))
                         DoCastSelf(_mailAura);
