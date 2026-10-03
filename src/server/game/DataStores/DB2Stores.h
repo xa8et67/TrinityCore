@@ -306,6 +306,12 @@ TC_GAME_API extern DB2Storage<TraitTreeXTraitCostEntry>             sTraitTreeXT
 TC_GAME_API extern DB2Storage<TraitTreeXTraitCurrencyEntry>         sTraitTreeXTraitCurrencyStore;
 TC_GAME_API extern DB2Storage<TransmogHolidayEntry>                 sTransmogHolidayStore;
 TC_GAME_API extern DB2Storage<TransmogIllusionEntry>                sTransmogIllusionStore;
+TC_GAME_API extern DB2Storage<TransmogOutfitEntryEntry>             sTransmogOutfitEntryStore;
+TC_GAME_API extern DB2Storage<TransmogOutfitSlotInfoEntry>          sTransmogOutfitSlotInfoStore;
+TC_GAME_API extern DB2Storage<TransmogOutfitSlotOptionEntry>        sTransmogOutfitSlotOptionInfoStore;
+TC_GAME_API extern DB2Storage<TransmogSituationEntry>               sTransmogSituationStore;
+TC_GAME_API extern DB2Storage<TransmogSituationGroupEntry>          sTransmogSituationGroupStore;
+TC_GAME_API extern DB2Storage<TransmogSituationTriggerEntry>        sTransmogSituationTriggerStore;
 TC_GAME_API extern DB2Storage<TransmogSetEntry>                     sTransmogSetStore;
 TC_GAME_API extern DB2Storage<TransmogSetGroupEntry>                sTransmogSetGroupStore;
 TC_GAME_API extern DB2Storage<TransmogSetItemEntry>                 sTransmogSetItemStore;
@@ -322,6 +328,15 @@ TC_GAME_API extern DB2Storage<WarbandSceneEntry>                    sWarbandScen
 TC_GAME_API extern DB2Storage<WorldEffectEntry>                     sWorldEffectStore;
 TC_GAME_API extern DB2Storage<WorldMapOverlayEntry>                 sWorldMapOverlayStore;
 TC_GAME_API extern DB2Storage<WorldStateExpressionEntry>            sWorldStateExpressionStore;
+
+struct ClassPowerTypes
+{
+    std::array<Powers, MAX_POWERS_PER_CLASS> PowerType = { };
+    uint8 PowerTypeCount = 0;
+
+    Powers const* begin() const { return PowerType.data(); }
+    Powers const* end() const { return PowerType.data() + PowerTypeCount; }
+};
 
 struct ContentTuningLevels
 {
@@ -468,7 +483,8 @@ public:
     static CharBaseInfoEntry const* GetCharBaseInfo(Races race, Classes class_);
     ChrClassUIDisplayEntry const* GetUiDisplayForClass(Classes unitClass) const;
     static char const* GetChrClassName(uint8 class_, LocaleConstant locale = DEFAULT_LOCALE);
-    uint32 GetPowerIndexByClass(Powers power, uint32 classId) const;
+    static ClassPowerTypes GetPowerTypesByClass(uint32 classId);
+    static uint32 GetPowerIndexByClass(Powers power, uint32 classId);
     std::vector<ChrCustomizationChoiceEntry const*> const* GetCustomiztionChoices(uint32 chrCustomizationOptionId) const;
     std::vector<ChrCustomizationOptionEntry const*> const* GetCustomiztionOptions(uint8 race, uint8 gender) const;
     std::vector<std::pair<uint32, std::vector<uint32>>> const* GetRequiredCustomizationChoices(uint32 chrCustomizationReqId) const;
@@ -486,6 +502,7 @@ public:
     std::pair<float, float> GetCurveXAxisRange(uint32 curveId) const;
     float GetCurveValueAt(uint32 curveId, float x) const;
     float GetCurveValueAt(CurveInterpolationMode mode, std::span<DBCPosition2D const> points, float x) const;
+    static std::string_view GetDifficultyName(Difficulty difficulty);
     EmotesTextSoundEntry const* GetTextSoundEmoteFor(uint32 emote, uint8 race, uint8 gender, uint8 class_) const;
     float EvaluateExpectedStat(ExpectedStatType stat, uint32 level, int32 expansion, uint32 contentTuningId, Classes unitClass, int32 mythicPlusMilestoneSeason) const;
     std::vector<uint32> const* GetFactionTeamList(uint32 faction) const;
@@ -499,18 +516,15 @@ public:
     ItemClassEntry const* GetItemClassByOldEnum(uint32 itemClass) const;
     bool HasItemCurrencyCost(uint32 itemId) const;
     std::vector<ItemLimitCategoryConditionEntry const*> const* GetItemLimitCategoryConditions(uint32 categoryId) const;
-    uint32 GetItemDisplayId(uint32 itemId, uint32 appearanceModId) const;
-    ItemModifiedAppearanceEntry const* GetItemModifiedAppearance(uint32 itemId, uint32 appearanceModId) const;
-    ItemModifiedAppearanceEntry const* GetDefaultItemModifiedAppearance(uint32 itemId) const;
     std::vector<ItemSetSpellEntry const*> const* GetItemSetSpells(uint32 itemSetId) const;
     std::vector<ItemSpecOverrideEntry const*> const* GetItemSpecOverrides(uint32 itemId) const;
     JournalTierEntry const* GetJournalTier(uint32 index) const;
     static LFGDungeonsEntry const* GetLfgDungeon(uint32 mapId, Difficulty difficulty);
     static uint32 GetDefaultMapLight(uint32 mapId);
     static uint32 GetLiquidFlags(uint32 liquidType);
-    MapDifficultyEntry const* GetDefaultMapDifficulty(uint32 mapId, Difficulty* difficulty = nullptr) const;
+    MapDifficultyEntry const* GetDefaultMapDifficulty(uint32 mapId) const;
     MapDifficultyEntry const* GetMapDifficultyData(uint32 mapId, Difficulty difficulty) const;
-    MapDifficultyEntry const* GetDownscaledMapDifficultyData(uint32 mapId, Difficulty &difficulty) const;
+    MapDifficultyEntry const* GetDownscaledMapDifficultyData(uint32 mapId, Difficulty difficulty) const;
     MapDifficultyConditionsContainer const* GetMapDifficultyConditions(uint32 mapDifficultyId) const;
     MountEntry const* GetMount(uint32 spellId) const;
     MountEntry const* GetMountById(uint32 id) const;
@@ -548,15 +562,12 @@ public:
     TaxiPathEntry const* GetTaxiPath(uint32 from, uint32 to) const;
     static bool IsTotemCategoryCompatibleWith(uint32 itemTotemCategoryId, uint32 requiredTotemCategoryId, bool requireAllTotems = true);
     bool IsToyItem(uint32 toy) const;
-    TransmogIllusionEntry const* GetTransmogIllusionForEnchantment(uint32 spellItemEnchantmentId) const;
-    std::vector<TransmogSetEntry const*> const* GetTransmogSetsForItemModifiedAppearance(uint32 itemModifiedAppearanceId) const;
-    std::vector<TransmogSetItemEntry const*> const* GetTransmogSetItems(uint32 transmogSetId) const;
     static bool GetUiMapPosition(float x, float y, float z, int32 mapId, int32 areaId, int32 wmoDoodadPlacementId, int32 wmoGroupId, UiMapSystem system, bool local,
         uint32* uiMapId = nullptr, DBCPosition2D* newPos = nullptr);
     bool Zone2MapCoordinates(uint32 areaId, float& x, float& y) const;
     void Map2ZoneCoordinates(uint32 areaId, float& x, float& y) const;
     bool IsUiMapPhase(uint32 phaseId) const;
-    WMOAreaTableEntry const* GetWMOAreaTable(int32 rootId, int32 adtId, int32 groupId) const;
+    static WMOAreaTableEntry const* GetWMOAreaTable(int32 rootId, int32 adtId, int32 groupId, bool allowGroupFallback);
     std::unordered_set<uint32> const* GetPVPStatIDsForMap(uint32 mapId) const;
 
 private:
